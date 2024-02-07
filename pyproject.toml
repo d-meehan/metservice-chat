@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "metservice-chat"
+version = "0.1.0"
+description = "A chat interface integrated with the metservice api to allow users to interact with weather data"
+authors = ["Dom Meehan <dom.meehan@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+requests = "^2.31.0"
+fastapi = "^0.109.2"
+pydantic = "^2.6.1"
+loguru = "^0.7.2"
+pathlib = "^1.0.1"
+geopy = "^2.4.1"
+instructor = "^0.5.0"
+
+
+[tool.poetry.group.lint.dependencies]
+flake8 = "^7.0.0"
+black = "^24.1.1"
+isort = "^5.13.2"
+mypy = "^1.8.0"
+
+
+[tool.poetry.group.dev.dependencies]
+jupyter = "^1.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
