@@ -1,7 +1,7 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 
-class GPTResponseToWeatherQuery(BaseModel):
+class ModelResponseToWeatherQuery(BaseModel):
     """Request model for weather queries."""
     response: str = Field(..., title='Response', description='Response from WeatherBot to the user query')
     weather_query_check: bool = Field(..., title='Weather query check', description='Is the user message a weather query?')
@@ -47,8 +47,8 @@ class Message(BaseModel):
 class MetserviceVariable(BaseModel):
     """Model for variable response in Metservice API."""
     name: str
-    units: str
-    value: float
+    value: float = Field(..., title='Value', description='Value of the variable')
+    units: str = Field(..., title='Units', description='Units of the variable')
 
 class MetserviceTimePointSummary(BaseModel):
     """Model for time point summary in Metservice API."""
@@ -56,3 +56,9 @@ class MetserviceTimePointSummary(BaseModel):
     latitude: float
     longitude: float
     variables: List[MetserviceVariable]
+
+class WeatherResponse(BaseModel):
+    response: str = Field(..., title='Response', description='Response from WeatherBot to the user query')
+    location: str
+    times: list[str]
+    variables: list[MetserviceVariable]
