@@ -2,9 +2,23 @@ from nicegui import ui, app
 from loguru import logger
 
 class UserService:
+    def __init__(self) -> None:
+        self._user_longitude = None
+        self._user_latitude = None
 
-    @staticmethod
-    async def get_user_location():
+    @property
+    async def user_longitude(self):
+        if self._user_longitude is None:
+            await self._get_user_location()
+        return self._user_longitude
+    
+    @property
+    async def user_latitude(self):
+        if self._user_latitude is None:
+            await self._get_user_location()
+        return self._user_latitude
+
+    async def _get_user_location(self):
         try:
             response = await ui.run_javascript('''
                 return await new Promise((resolve, reject) => {
@@ -26,7 +40,9 @@ class UserService:
                 });
             ''', timeout=10.0)
             logger.info(f"User location: {response}")
-            return response
+            self._user_latitude = response['latitude']
+            self._user_longitude = response['longitude']
+            return None
         #TODO: Add a more specific error message
         except Exception as e:
             logger.error(f"Error getting user location: {e}")

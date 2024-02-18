@@ -7,7 +7,7 @@ import instructor
 import googlemaps
 from dotenv import load_dotenv
 import openai
-from ..models import ModelResponseToWeatherQuery, Message, MetserviceTimePointSummary, WeatherResponse, MetservicePointTimeRequest
+from ..models import ModelResponseToWeatherQuery, Message, MetserviceTimePointSummary, MetservicePointTimeRequest
 from ..utils.constants import METSERVICE_VARIABLES, SYSTEM_PROMPT
 from ..presentation.ui_manager import ChatUIManager
 from ..service.weather_service import WeatherService
@@ -23,7 +23,7 @@ class ChatService:
         self.weather_service = weather_service
         self.chat_ui_manager = chat_ui_manager
 
-    async def process_message(self, user_message: str) -> WeatherResponse:
+    async def process_message(self, user_message: str) -> ModelResponseToWeatherQuery:
         self.chat_ui_manager.add_message_to_log(
             Message(
                 role="user", 
@@ -34,7 +34,7 @@ class ChatService:
                 )
             )
 
-        response: ModelResponseToWeatherQuery = await self._model_query(user_message, response_model=ModelResponseToWeatherQuery)
+        response: ModelResponseToWeatherQuery = await self._model_query(response_model=ModelResponseToWeatherQuery)
 
         self.chat_ui_manager.add_message_to_log(
             Message(
@@ -47,7 +47,7 @@ class ChatService:
             )
         while response.weather_query_check and not response.sufficient_data_check:
             await self.weather_service.get_weather_data(response)
-            response = await self._model_query(user_message, response_model=ModelResponseToWeatherQuery)
+            response = await self._model_query(response_model=ModelResponseToWeatherQuery)
             if response.sufficient_data_check:
                 self.chat_ui_manager.add_message_to_log(
                     Message(
@@ -62,7 +62,7 @@ class ChatService:
         return response
 
 
-    async def _model_query(self, user_message: str, response_model: BaseModel) -> ModelResponseToWeatherQuery:
+    async def _model_query(self, response_model: BaseModel) -> ModelResponseToWeatherQuery:
         """
         This function takes the user's message, the chat log, the data store, the response model and the app storage as input and returns the response from the GPT model.
         
@@ -76,17 +76,20 @@ class ChatService:
 
         if self.weather_service.data_store:
             formatted_data = [
-                f"Time: {data.time}, Latitude: {data.latitude}, Longitude: {data.longitude}, \n {', '.join([f'{variable.name}: {variable.value}{variable.units}' for variable in data.variables])}"
+                f"Time: {data.time}, Location: {data.location}, Latitude: {data.latitude}, Longitude: {data.longitude}  \n {
+                    ', '.join([f'{variable.name}: {variable.value}{variable.units}' for variable in data.variables])}"
                 for data in self.weather_service.data_store
             ]
             formatted_data = "\n\n".join(formatted_data)
         else:
             formatted_data = "No data has been requested yet."
 
+        if 'location' not in app.storage.user:
+            app.storage.user['location'] = "unknown"
+
         system_prompt = SYSTEM_PROMPT.format(
             current_datetime=datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
-            latitude=app.storage.user['latitude'],
-            longitude=app.storage.user['longitude'],
+            user_location=app.storage.user["location"],
             data_store=formatted_data,
             vars=METSERVICE_VARIABLES
         )
@@ -100,7 +103,7 @@ class ChatService:
         chat_log = self.chat_ui_manager.chat_log
 
         for message in chat_log:
-            messages.insert(-1, {"role": message.role, "content": message.content})
+            messages.append({"role": message.role, "content": message.content})
         while messages[-1].get("role") == "assistant":
             messages.pop()
         logger.info(f"Messages: {messages}")
