@@ -1,65 +1,86 @@
 import os
+from datetime import datetime
 from loguru import logger
 import httpx
 from nicegui import app
-from ..models import MetservicePointTimeRequest, MetserviceTimePointSummary, MetserviceVariable, MetservicePointTimeRequest, ModelResponseToWeatherQuery
-from ..service.user_service import UserService
+from models import MetservicePointTimeRequest, MetserviceTimePointSummary, MetserviceVariable, MetservicePointTimeRequest, MetservicePeriodSummary, QueryClassification
+from service.user_service import UserService
+from utils.constants import query_variable_map, query_time_map
 
 class WeatherService:
     def __init__(self, user_service: UserService) -> None:
-        self.data_store: list[MetserviceTimePointSummary] = []
+        self.data_store: list[MetservicePeriodSummary] = []
         self.user_service = user_service
 
-    async def get_weather_data(self, request: ModelResponseToWeatherQuery) -> None:
-        from_datetime = request.start_time.strftime("%Y-%m-%dT%H:00:00Z")
-        interval = f"1{request.interval}"
-        if request.interval == "day":
-            repeat = (request.end_time - request.start_time).days
-        else:
-            timedelta = request.end_time - request.start_time
-            repeat = timedelta.total_seconds() // 3600 
+    async def get_weather_data(self, request: QueryClassification) -> None:
+        metservice_request = await self._create_API_request(request)
+        metservice_response = await self._metservice_api_call(metservice_request)
+        
+        for new_data in metservice_response:
+            new_data.location = request.location
+            new_data.weather_data_type = request.query_type
+            if not any(
+                data.date == new_data.date and 
+                data.location == new_data.location and
+                data.weather_data_type == new_data.weather_data_type
+                for data in self.data_store):
+                self.data_store.append(new_data)
+            else:
+                logger.info(f"Data already exists for time: {new_data.date}, latitude: {new_data.latitude}, longitude: {new_data.longitude}")
 
-        if not request.location:
-            if 'latitude' not in app.storage.user and 'longitude' not in app.storage.user:
+    async def _create_API_request(self, request: QueryClassification) -> MetservicePointTimeRequest:
+        logger.info(f"Request: {request}")
+        start_time = min(
+            time for period, time in query_time_map.items() if period in request.query_period)
+        from_datetime = datetime.combine(request.query_from_date, start_time.time()).strftime("%Y-%m-%dT%H:00:00Z")
+        if request.query_period == ["multi-day"]:
+            days = (request.query_to_date - request.query_from_date).days
+            repeat = days * 4
+            interval = "6h"
+        elif request.query_period == ["whole day"]:
+            repeat = 24
+            interval = "1h"
+        else:
+            repeat = len(request.query_period)*6
+            interval = "1h"
+        logger.info(f"From datetime: {from_datetime}, interval: {interval}, repeat: {repeat}")
+        variables = []
+        for query_type in request.query_type:
+            variables.extend(query_variable_map[query_type])
+
+        logger.info(f"request.location: {request.location}")
+        if request.location is None:
+            if 'location' not in app.storage.user:
                 try:
-                    app.storage.user['latitude'] = await self.user_service.user_latitude()
-                    app.storage.user['longitude'] = await self.user_service.user_longitude()
+                    latitude = await self.user_service.user_latitude()
+                    longitude = await self.user_service.user_longitude()
+                    app.storage.user['location'] = await self._lat_lon_to_location(latitude, longitude)
                 except Exception as e:
                     logger.error(f"No location provided in query and user did not respond to request for location: {e}")
-                    #TODO: create a response to the user to ask for location and adjust to appropriate error
-                    return
-                
-            app.storage.user['location'] = await self._lat_lon_to_location(app.storage.user['latitude'], app.storage.user['longitude'])
             request.location = app.storage.user['location']
 
-            metservice_request = MetservicePointTimeRequest(
-                latitude=app.storage.user['latitude'],
-                longitude=app.storage.user['longitude'],
-                variables=request.variables,
-                from_datetime=from_datetime,
-                interval=interval,
-                repeat=repeat
-            )
-        else:
-            metservice_request = await self._location_to_lat_lon(request)
+        latitude, longitude = await self._location_to_lat_lon(request.location)
 
-        metservice_response = await self._metservice_api_call(metservice_request)
-        for data in self.data_store:
-            for new_data in metservice_response:
-                new_data.location = request.location
-                if new_data.latitude == data.latitude and new_data.longitude == data.longitude and new_data.time == data.time:
-                    metservice_response.remove(new_data)
-        self.data_store.extend(metservice_response)
+        metservice_request = MetservicePointTimeRequest(
+            latitude=latitude,
+            longitude=longitude,
+            variables=variables,
+            from_datetime=from_datetime,
+            interval=interval,
+            repeat=repeat
+        )
+
+        return metservice_request
 
     @staticmethod
-    async def _location_to_lat_lon(response: ModelResponseToWeatherQuery) -> MetservicePointTimeRequest:
-        logger.info(f"Location: {response.location}")
+    async def _location_to_lat_lon(location: str) -> tuple[float, float]:
+        logger.info(f"Location: {location}")
         
         async with httpx.AsyncClient() as request_client:
             geocode_response = await request_client.get(
                 "https://maps.googleapis.com/maps/api/geocode/json",
                 params={
-                    "address": response.location,
+                    "address": location,
                     "key": os.environ["GOOGLE_MAPS_API_KEY"]
                 }
             )
@@ -69,29 +90,14 @@ class WeatherService:
                 f"Request failed with status code {geocode_response.status_code}"
             )
         geocode_response = geocode_response.json()
-        logger.info(f"response.start time: {response.start_time}")
-        from_datetime = response.start_time.strftime("%Y-%m-%dT%H:00:00Z")
-        logger.info(f"from_datetime: {from_datetime}")
-        interval = f"1{response.interval}"
-        if response.interval == "day":
-            repeat = (response.end_time - response.start_time).days
-        else:
-            timedelta = response.end_time - response.start_time
-            repeat = timedelta.total_seconds() // 3600 
+        latitude=geocode_response['results'][0]['geometry']['location']['lat']
+        longitude=geocode_response['results'][0]['geometry']['location']['lng']
 
-        metservice_request = MetservicePointTimeRequest(
-            latitude=geocode_response['results'][0]['geometry']['location']['lat'],
-            longitude=geocode_response['results'][0]['geometry']['location']['lng'],
-            variables=response.variables,
-            from_datetime=from_datetime,
-            interval=interval,
-            repeat=repeat
-        )
+        return latitude, longitude
 
-        return metservice_request
     
-
-    async def _lat_lon_to_location(self, latitude: float, longitude: float) -> str:
+    @staticmethod
+    async def _lat_lon_to_location(latitude: float, longitude: float) -> str:
         async with httpx.AsyncClient() as request_client:
             geocode_response = await request_client.get(
                 "https://maps.googleapis.com/maps/api/geocode/json",
@@ -111,7 +117,7 @@ class WeatherService:
 
         return location
 
-    async def _metservice_api_call(self, request: MetservicePointTimeRequest) -> list[MetserviceTimePointSummary]:
+    async def _metservice_api_call(self, request: MetservicePointTimeRequest) -> list[MetservicePeriodSummary]:
         logger.info(f"Request: {request}")
         async with httpx.AsyncClient() as request_client:
             response = await request_client.post(
@@ -138,30 +144,66 @@ class WeatherService:
         metservice_response = await self._clean_metservice_response(response)
         return metservice_response
 
-    async def _clean_metservice_response(self, metservice_api_response: httpx.Response) -> list[MetserviceTimePointSummary]:
+    async def _clean_metservice_response(self, metservice_api_response: httpx.Response) -> list[MetservicePeriodSummary]:
         response_json = metservice_api_response.json()
-        metservice_response = []
-        for point in response_json['dimensions']['point']['data']:
+        metservice_response: list[MetservicePeriodSummary] = []
+
+        try:
+            points_data: list[dict] = response_json['dimensions']['point']['data']
+            times_data: list[str] = response_json['dimensions']['time']['data']
+            variables_data: dict = response_json['variables']
+        except KeyError as e:
+            logger.info(f"Missing key in response: {e}")
+            return []
+
+        for point in points_data:
             latitude = point.get('lat')
             longitude = point.get('lon')
-            for time in response_json['dimensions']['time']['data']:
-                variables = []
-                for var_name, var_data in response_json['variables'].items():
-                    var_units = var_data.get('units')
-                    var_value = var_data.get('data')[len(metservice_response)]
-                    if var_units == "degreeK":
-                        var_value -= 273.15
-                        var_units = "C"
-                    if var_units == "meterPerSecond":
-                        var_value *= 3.6
-                        var_units = "km/h"
-                    if var_units == "percent":
-                        var_units = "%"
-                    if var_units == "millimeterPerHour":
-                        var_units = "mm/h"
-                    var_value = round(var_value, 2)
-                    variable = MetserviceVariable(name=var_name, value=var_value, units=var_units)
-                    variables.append(variable)
-                metservice_response.append(MetserviceTimePointSummary(
-                    time=time, latitude=latitude, longitude=longitude, variables=variables))
+
+            # Group times by day
+            times_by_day: dict[str, list[str]] = {}
+            for time in times_data:
+                day = time.split('T')[0]
+                if day not in times_by_day:
+                    times_by_day[day] = []
+                times_by_day[day].append(time)
+
+            for day, day_times in times_by_day.items():
+                hour_summaries = []
+
+                for time in day_times:
+                    hour_str = time.split('T')[1][:5]
+                    hour = datetime.strptime(f"{day} {hour_str}", "%Y-%m-%d %H:%M").time()
+                    variables = []
+
+                    for var_name, var_data in variables_data.items():
+                        index = times_data.index(time)
+                        var_value = var_data['data'][index]
+                        var_units = var_data.get('units')
+                        # Apply transformations based on units
+                        if var_units == "degreeK":
+                            var_value -= 273.15
+                            var_units = "C"
+                        if var_units == "meterPerSecond":
+                            var_value *= 3.6
+                            var_units = "km/h"
+                        if var_units == "percent":
+                            var_units = "%"
+                        if var_units == "millimeterPerHour":
+                            var_units = "mm/h"
+                        logger.info(f"Variable: {var_name}, Value: {var_value}, Units: {var_units}")
+                        var_value = round(var_value, 2)
+                        variables.append(MetserviceVariable(name=var_name, value=var_value, units=var_units))
+
+                    hour_summaries.append(MetserviceTimePointSummary(hour=hour, variables=variables))
+
+                if hour_summaries:
+                    metservice_response.append(MetservicePeriodSummary(
+                        weather_data_type=[],
+                        date=datetime.strptime(day, "%Y-%m-%d"),
+                        latitude=latitude,
+                        longitude=longitude,
+                        hour_summaries=hour_summaries
+                    ))
+
         return metservice_response

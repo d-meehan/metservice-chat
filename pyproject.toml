@@ -20,6 +20,7 @@ asyncio = "^3.4.3"
 httpx = "^0.26.0"
 googlemaps = "^4.10.0"
 ipykernel = "^6.29.2"
+nicegui-highcharts = "^1.0.1"
 
 
 [tool.poetry.group.lint.dependencies]

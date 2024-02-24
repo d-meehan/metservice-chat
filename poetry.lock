@@ -1999,6 +1999,20 @@ native = ["pywebview (>=4.4.0,<5.0.0)"]
 plotly = ["plotly (>=5.13.0,<6.0.0)"]
 
 [[package]]
+name = "nicegui-highcharts"
+version = "1.0.1"
+description = "Add Highcharts elements to your NiceGUI app."
+optional = false
+python-versions = ">=3.8,<4.0"
+files = [
+    {file = "nicegui_highcharts-1.0.1-py3-none-any.whl", hash = "sha256:7f4aed5146024ddea225bf901d83ee43a1970cc3050516513e74ee8cc3464213"},
+    {file = "nicegui_highcharts-1.0.1.tar.gz", hash = "sha256:810813adbd6dbb7f51d199c016a5d97aa293f16eeb5046574890700cea38924c"},
+]
+
+[package.dependencies]
+nicegui = ">=1.4.0,<2.0.0"
+
+[[package]]
 name = "notebook"
 version = "7.0.7"
 description = "Jupyter Notebook - A web-based notebook environment for interactive computing"
@@ -3727,4 +3741,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "7ef2a4fdb1e79e25031779132c45cfb8f277cb214008eaf3058d9f0ab93067af"
+content-hash = "5c11b8d49423679d0836c82873f200ace02fa2c0f0b9a778feae3a253da122f4"

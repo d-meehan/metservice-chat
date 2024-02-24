@@ -1,5 +1,5 @@
 from nicegui import ui
-from ..models import Message
+from models import Message
 
 class ChatUIManager:
     def __init__(self) -> None:

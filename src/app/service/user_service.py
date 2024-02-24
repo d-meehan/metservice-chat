@@ -6,13 +6,11 @@ class UserService:
         self._user_longitude = None
         self._user_latitude = None
 
-    @property
     async def user_longitude(self):
         if self._user_longitude is None:
             await self._get_user_location()
         return self._user_longitude
     
-    @property
     async def user_latitude(self):
         if self._user_latitude is None:
             await self._get_user_location()

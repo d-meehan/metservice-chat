@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from typing import TypeVar
 from pydantic import BaseModel
 from loguru import logger
 from nicegui import app, ui
@@ -7,10 +8,10 @@ import instructor
 import googlemaps
 from dotenv import load_dotenv
 import openai
-from ..models import ModelResponseToWeatherQuery, Message, MetserviceTimePointSummary, MetservicePointTimeRequest
-from ..utils.constants import METSERVICE_VARIABLES, SYSTEM_PROMPT
-from ..presentation.ui_manager import ChatUIManager
-from ..service.weather_service import WeatherService
+from models import ModelResponseToWeatherQuery, Message, QueryClassification
+from utils.constants import METSERVICE_VARIABLES, CLASSIFICATION_PROMPT, QUERY_RESPONSE_PROMPT
+from presentation.ui_manager import ChatUIManager
+from service.weather_service import WeatherService
 
 load_dotenv()
 
@@ -18,12 +19,14 @@ pydantic_client = instructor.apatch(openai.AsyncOpenAI(api_key=os.environ['OPENA
 client = openai.AsyncOpenAI(api_key=os.environ['OPENAI_API_KEY'])
 gmaps = googlemaps.Client(key=os.environ['GOOGLE_MAPS_API_KEY'])
 
+ResponseModel = TypeVar("ResponseModel", bound=BaseModel)
+
 class ChatService:
     def __init__(self, weather_service: WeatherService, chat_ui_manager: ChatUIManager) -> None:
         self.weather_service = weather_service
         self.chat_ui_manager = chat_ui_manager
 
-    async def process_message(self, user_message: str) -> ModelResponseToWeatherQuery:
+    async def process_message(self, user_message: str) -> QueryClassification:
         self.chat_ui_manager.add_message_to_log(
             Message(
                 role="user", 
@@ -34,35 +37,46 @@ class ChatService:
                 )
             )
 
-        response: ModelResponseToWeatherQuery = await self._model_query(response_model=ModelResponseToWeatherQuery)
+        classification: QueryClassification = await self._classify_query(response_model=QueryClassification)
+        if classification.location == []:
+            if 'location' not in app.storage.user:
+                try:
+                    latitude = await self.weather_service.user_service.user_latitude()
+                    longitude = await self.weather_service.user_service.user_longitude()
+                    app.storage.user['location'] = await self.weather_service._lat_lon_to_location(latitude, longitude)
+                except Exception as e:
+                    logger.error(
+                        f"No location provided in query and user did not respond to request for location: {e}")
+            classification.location = app.storage.user['location']
 
+
+        while not any(
+            classification.query_type == stored_data.weather_data_type and
+            classification.location == stored_data.location and
+            classification.query_from_date == stored_data.date
+            for stored_data in self.weather_service.data_store) and not \
+                classification.query_type == ["non-weather"]:
+                await self.weather_service.get_weather_data(classification)
+
+        response = await self._answer_query()
+        # if any(
+        #     response.query_type == stored_data.weather_data_type and
+        #     response.location == stored_data.location and
+        #     response.query_from_date == stored_data.date
+        #     for stored_data in self.weather_service.data_store):
         self.chat_ui_manager.add_message_to_log(
             Message(
-                role="assistant", 
-                content=response.response, 
+                role="WeatherBot", 
+                content=response, 
                 stamp=datetime.now().strftime("%H:%M"), 
                 avatar="", 
                 sent=False
                 )
             )
-        while response.weather_query_check and not response.sufficient_data_check:
-            await self.weather_service.get_weather_data(response)
-            response = await self._model_query(response_model=ModelResponseToWeatherQuery)
-            if response.sufficient_data_check:
-                self.chat_ui_manager.add_message_to_log(
-                    Message(
-                        role="assistant", 
-                        content=response.response, 
-                        stamp=datetime.now().strftime("%H:%M"), 
-                        avatar="", 
-                        sent=False
-                        )
-                    )
-                return response
-        return response
+        return classification
 
 
-    async def _model_query(self, response_model: BaseModel) -> ModelResponseToWeatherQuery:
+    async def _classify_query(self, response_model: QueryClassification) -> QueryClassification:
         """
         This function takes the user's message, the chat log, the data store, the response model and the app storage as input and returns the response from the GPT model.
         
@@ -74,24 +88,8 @@ class ChatService:
         app_storage (dict): The app storage
         """
 
-        if self.weather_service.data_store:
-            formatted_data = [
-                f"Time: {data.time}, Location: {data.location}, Latitude: {data.latitude}, Longitude: {data.longitude}  \n {
-                    ', '.join([f'{variable.name}: {variable.value}{variable.units}' for variable in data.variables])}"
-                for data in self.weather_service.data_store
-            ]
-            formatted_data = "\n\n".join(formatted_data)
-        else:
-            formatted_data = "No data has been requested yet."
-
-        if 'location' not in app.storage.user:
-            app.storage.user['location'] = "unknown"
-
-        system_prompt = SYSTEM_PROMPT.format(
+        system_prompt = CLASSIFICATION_PROMPT.format(
             current_datetime=datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
-            user_location=app.storage.user["location"],
-            data_store=formatted_data,
-            vars=METSERVICE_VARIABLES
         )
 
         messages=[
@@ -103,17 +101,76 @@ class ChatService:
         chat_log = self.chat_ui_manager.chat_log
 
         for message in chat_log:
-            messages.append({"role": message.role, "content": message.content})
+            if message.role == "WeatherBot":
+                messages.append({"role": "assistant", "content": message.content})
+            else:
+                messages.append({"role": message.role, "content": message.content})
         while messages[-1].get("role") == "assistant":
             messages.pop()
         logger.info(f"Messages: {messages}")
 
         response = await pydantic_client.chat.completions.create(
-            model="gpt-3.5-turbo-0125",
+            model="gpt-3.5-turbo",
             response_model=response_model,
             messages=messages,
         )
 
-        assert isinstance(response, ModelResponseToWeatherQuery)
+        assert isinstance(response, QueryClassification)
         logger.info(f"GPT response: {response}")
         return response
+    
+    async def _answer_query(self) -> str:
+        """
+        This function takes the user's message, the chat log, the data store, the response model and the app storage as input and returns the response from the GPT model.
+        
+        Parameters:
+        user_message (str): The user's message
+        chat_log (list[Message]): The chat log
+        data_store (list[list[MetserviceTimePointSummary]]): The data store
+        response_model (BaseModel): The response model
+        app_storage (dict): The app storage
+        """
+
+        formatted_data = [
+            f"Date: {data.date}, Query type(s): {data.weather_data_type}, Location: {data.location}  \n {
+                '\n\n'.join(
+                    f'Time: {time.hour} \n {'\n'.join(f'{variable.name}: {variable.value}{variable.units}' for variable in time.variables)}' for time in data.hour_summaries)}"
+            for data in self.weather_service.data_store
+        ]
+        formatted_data = "\n\n".join(formatted_data)
+
+        if 'location' in app.storage.user:
+            location = app.storage.user['location']
+        else:
+            location = "unknown location"
+
+        system_prompt = QUERY_RESPONSE_PROMPT.format(
+            current_datetime=datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            user_location=location,
+            data_store=formatted_data,
+        )
+
+        messages=[
+                {
+                    "role": "system", 
+                    "content": system_prompt
+                },
+            ]
+        chat_log = self.chat_ui_manager.chat_log
+
+        for message in chat_log:
+            if message.role == "WeatherBot":
+                messages.append({"role": "assistant", "content": message.content})
+            else:
+                messages.append({"role": message.role, "content": message.content})
+        while messages[-1].get("role") == "assistant":
+            messages.pop()
+        logger.info(f"Messages: {messages}")
+
+        response = await client.chat.completions.create(
+            model="gpt-4-turbo-preview",
+            messages=messages,
+        )
+
+        logger.info(f"GPT response: {response}")
+        return response.choices[0].message.content

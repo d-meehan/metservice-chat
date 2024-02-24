@@ -1,136 +1,226 @@
-from nicegui import ui, events, app
+from loguru import logger
+from typing import Tuple
+from nicegui import ui
+from datetime import datetime
+from utils.constants import WeatherIconMap
 
-user_message = ui.chat_message('Hello, world!', name='User', sent=True, avatar='https://cdn.quasar.dev/img')
+# Basic Highchart configuration for weather visualization
+chart_options = {
+    'time': {'useUTC': False},
+    'title': {'text': 'Weather Forecast', 'align': 'left',
+            'style': {
+                'whiteSpace': 'nowrap',
+                'textOverflow': 'ellipsis'},
+            },
+    'chart': {'marginBottom': 100, 'marginRight': 60, 'marginTop': 50, 'plotBorderWidth': 1,
+            'height': 400, 'alignTicks': False, 'scrollablePlotArea': {'minWidth': 650}},
+    'credits': {'text': 'Forecast from <a href="https://metservice.com">Metservice</a>',
+                'href': 'https://metservice.com',
+                'position': {'x': -40}
+            },
+    'xAxis': {
+        'type': 'datetime',
+        'title': {'text': 'Time'},
+        'tickInterval': 36e5,  # Two hours
+        'minorTickInterval': 36e5,  # One hour
+        'tickLength': 0,
+        'gridLineWidth': 1,
+        'gridLineColor': 'rgba(128, 128, 128, 0.1)',
+        'startOnTick': False,
+        'endOnTick': False,
+        'minPadding': 0,
+        'maxPadding': 0,
+        'offset': 30,
+        'showLastLabel': True,
+        'labels': {'format': '{value:%H}'},
+        'crosshair': True
+    },
+    'yAxis': [{  # Primary yAxis for temperature
+        'title': False,
+        'labels': {
+            'format': '{value}°',
+            'style': {
+                'fontSize': '10px'
+            },
+            'x': -3
+        },
+        'plotLines': [{  # Zero plane
+            'value': 0,
+            'color': '#BBBBBB',
+            'width': 1,
+            'zIndex': 2
+        }],
+        'maxPadding': 0.03,
+        'minRange': 8,
+        'tickInterval': 1,
+        'gridLineColor': 'rgba(128, 128, 128, 0.1)'
+    }, {  # Secondary yAxis for precipitation
+        'title': None,
+        'labels': {'enabled': False},
+        'gridLineWidth': 0,
+        'tickLength': 0,
+        'minRange': 10,
+        'min': 0
+    }, {  # Tertiary yAxis for humidity
+        'allowDecimals': False,
+        'title': {'text': 'Humidity %', 'offset': 0, 'align': 'high', 'rotation': 0,
+                'style': {'fontSize': '10px', 'color': '#7cb5ec'},
+                'textAlign': 'left', 'x': 3},
+        'labels': {'style': {'fontSize': '8px', 'color': '#7cb5ec'}, 'y': 2, 'x': 3},
+        'gridLineWidth': 0,
+        'opposite': True,
+        'showLastLabel': False
+    }],
+    'tooltip': {
+        'shared': True,
+        'useHTML': True,
+        'headerFormat': '<small>{point.x:%A, %b %e, %H:%M} - {point.point.to:%H:%M}</small><br>' +
+        '<b>{point.point.symbolName}</b><br>'
+    },
+    'legend': {'enabled': False},
+    'plotOptions': {'series': {'pointPlacement': 'between'},
+    },
+    'series': [
+        {
+            'name': 'Temperature',
+            'data': [],  # To be filled with data
+            'type': 'spline',
+            'marker': {'enabled': False, 'states': {'hover': {'enabled': True}}},
+            'tooltip': {'pointFormat': '<span style="color:{point.color}">\u25CF</span> ' +
+                        '{series.name}: <b>{point.y}°C</b><br/>'},
+            'zIndex': 1,
+            'color': '#FF3333',
+            'negativeColor': '#48AFE8'
+        }, {
+            'name': 'Precipitation',
+            'data': [],  # To be filled with data
+            'type': 'column',
+            'color': '#68CFE8',
+            'yAxis': 1,
+            'groupPadding': 0,
+            'pointPadding': 0,
+            'grouping': False,
+            'dataLabels': {
+                    'enabled': True,
+                    'filter': {'operator': '>', 'property': 'y', 'value': 0},
+                    'style': {'fontSize': '8px', 'color': '#666'}
+            },
+            'tooltip': {'valueSuffix': ' mm'}
+        }, {
+            'name': 'Humidity',
+            'color': '#7cb5ec',
+            'data': [],  # To be filled with data
+            'marker': {'enabled': False},
+            'shadow': False,
+            'tooltip': {'valueSuffix': ' %'},
+            'dashStyle': 'shortdot',
+            'yAxis': 2
+        }, {
+            'name': 'Wind',
+            'type': 'windbarb',
+            'id': 'windbarbs',
+            'color': '#434348',
+            'lineWidth': 1.5,
+            'data': [],  # To be filled with data
+            'vectorLength': 18,
+            'yOffset': -15,
+            'tooltip': {'valueSuffix': ' km/h'}
+        }, {
+            'name': 'Cloud cover',
+            'data': [],  # To be filled with data
+            'type': 'area',
+            'color': '#7cb5ec',
+            'fillOpacity': 0.3,
+            'tooltip': {'valueSuffix': ' %'},
+            'visible': False
+        }
+    ],
+}
 
-# general
-with ui.section(): # with creates parent relationship
-    ui.label('Hello, world!') # label
-row = ui.row() # row
 
-with row:
-    ui.label('Hello, world!') # adds label to existing row
+def gen_query_series_to_chart(chart: ui.highchart, time_data: list[datetime], temp_data: list, precip_data: list, humidity_data: list, wind_data: list[list], cloud_data: list) -> ui.highchart:
+    """
+    This function takes the chart and the data as input and returns the chart with the data added to it.
 
-row.remove # removes element from row
-row.clear # removes all elements from row
+    Parameters:
+    chart (ui.highchart): The chart
+    time_data (list): The time data
+    temp_data (list): The temperature data
+    precip_data (list): The precipitation data
+    humidity_data (list): The humidity data
+    wind_data (list[list]): The wind data
+    cloud_data (list): The cloud data
+    """
+    chart.options['plotOptions']['series']['pointStart'] = time_data[0].timestamp() * 1000
+    chart.options['plotOptions']['series']['pointInterval'] = (time_data[1] - time_data[0]).seconds * 1000
+    chart.options['series'][0]['data'] = [
+        {'x': point['x'], 'y': point['y'], 
+            'dataLabels': {
+                'enabled': True, 
+                'useHTML': True, 
+                'format': ('<div style="width: 30px; height: 30px; overflow: hidden; border-radius: 50%">' + f'<img src="{point["iconPath"]}"' + 'style="width: 30px"></div>')
+            }} for point in temp_data]
+    logger.info(f"chart.options['series'][0]['data']: {chart.options['series'][0]['data']}")
+    chart.options['series'][1]['data'] = precip_data
+    chart.options['series'][2]['data'] = humidity_data
+    chart.options['series'][3]['data'] = wind_data
+    chart.options['series'][4]['data'] = cloud_data
 
-ui.scroll_area # creates scrollable components
-ui.separator # separator line
-ui.splitter # resizable sections
-
-with ui.row().classes('w-full border'):
-    ui.label('Left')
-    ui.space() # fills space between elements
-    ui.label('Right')
-
-ui.tooltip # expanding tooltip for buttons
-ui.notify # notification for user
-
-# notification that updates
-async def compute():
-    n = ui.notification(timeout=None)
-    for i in range(10):
-        n.message = f'Computing {i/10:.0%}'
-        n.spinner = True
-        await asyncio.sleep(0.2)
-    n.message = 'Done!'
-    n.spinner = False
-    await asyncio.sleep(1)
-    n.dismiss()
-
-ui.button('Compute', on_click=compute)
-
-# menu with button
-with ui.row().classes('w-full items-center'):
-    result = ui.label().classes('mr-auto')
-    with ui.button(icon='menu'):
-        with ui.menu() as menu:
-            ui.menu_item('Menu item 1', lambda: result.set_text('Selected item 1'))
-            ui.menu_item('Menu item 2', lambda: result.set_text('Selected item 2'))
-            ui.menu_item('Menu item 3 (keep open)',
-                         lambda: result.set_text('Selected item 3'), auto_close=False)
-            ui.separator()
-            ui.menu_item('Close', on_click=menu.close)
-
-ui.query('body').style = 'background-color: #f0f0f0' # change aspect of specified element
-ui.timer # ongoing timer that can call a function at a specified interval or after a specified time, can be cancelled or set active by other elements
-
-@ui.refreshable # decorates a function so when it's call all of the elements it generates are deleted and replaced
-def refreshable():
-    return ui.label('Hello, world!')
-
-ui.button("test").on('mousedown', lambda: ui.refreshable()) # custom event handling
-app.storage.user # storage for user data persistence
-
-# open url in new tab
-url = 'https://github.com/zauberzeug/nicegui/'
-ui.button('Open GitHub', on_click=lambda: ui.open(url, new_tab=True))
+    return chart
 
 
-# async pattern
-async def async_task():
-    ui.notify('Asynchronous task started')
-    await asyncio.sleep(5)
-    ui.notify('Asynchronous task finished')
-
-# track keyboard input
-def handle_key(e: KeyEventArguments):
-    if e.key == 'f' and not e.action.repeat:
-        if e.action.keyup:
-            ui.notify('f was just released')
-        elif e.action.keydown:
-            ui.notify('f was just pressed')
-    if e.modifiers.shift and e.action.keydown:
-        if e.key.arrow_left:
-            ui.notify('going left')
-        elif e.key.arrow_right:
-            ui.notify('going right')
-        elif e.key.arrow_up:
-            ui.notify('going up')
-        elif e.key.arrow_down:
-            ui.notify('going down')
-
-keyboard = ui.keyboard(on_key=handle_key)
-
-# chat interface
-ui.button # button
-ui.input # text input
-ui.avatar # avatar for user and model
-ui.image  # image for showcasing weather results
-with ui.image():
-    ui.label('Hello, world!') # overlay on images
-ui.spinner # spinner for loading
-
-# weather interface
-ui.table # table for weather results
-ui.icon  # icon for weather results
-ui.highchart # highchart for weather results
-ui.leaflet # map for weather results
-ui.carousel # interactive carousel of images 
-
-#making images handle mouse interactions
-def mouse_handler(e: events.MouseEventArguments):
-    color = 'SkyBlue' if e.type == 'mousedown' else 'SteelBlue'
-    ii.content += f'<circle cx="{e.image_x}" cy="{
-        e.image_y}" r="15" fill="none" stroke="{color}" stroke-width="4" />'
-    ui.notify(f'{e.type} at ({e.image_x:.1f}, {e.image_y:.1f})')
-
-src = 'https://picsum.photos/id/565/640/360'
-ii = ui.interactive_image(src, on_mouse=mouse_handler, events=[
-                          'mousedown', 'mouseup'], cross=True)
-
-# svg image
-content = '''
-    <svg viewBox="0 0 200 200" width="100" height="100" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="100" cy="100" r="78" fill="#ffde34" stroke="black" stroke-width="3" />
-    <circle cx="80" cy="85" r="8" />
-    <circle cx="120" cy="85" r="8" />
-    <path d="m60,120 C75,150 125,150 140,120" style="fill:none; stroke:black; stroke-width:8; stroke-linecap:round" />
-    </svg>'''
-ui.html(content)
+def categorize_weather(prec_mm: float, wind_km_h: float, cloud_pct: float, temp_c: float) -> str:
+    try:
+        if temp_c < 0 and 0 <= prec_mm <= 0.2 and wind_km_h < 40:
+            return 'frost'
+        elif 0 <= prec_mm <= 0.2 and wind_km_h < 40:
+            if cloud_pct < 10:
+                return 'fine'
+            elif cloud_pct <= 70:
+                return 'partly_cloudy'
+            else:
+                return 'cloudy'
+        elif 0.2 < prec_mm < 2 and wind_km_h < 40:
+            return 'few_showers'
+        elif 2 <= prec_mm <= 6 and wind_km_h < 40:
+            return 'showers'
+        elif prec_mm > 6 and wind_km_h < 40:
+            return 'rain'
+        elif wind_km_h >= 40:
+            return 'wind'
+        else:
+            return 'Unspecified'
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
+        return 'Error'
 
 
+def fetch_weather_icons(time_data: list[datetime], rain_data: list[float], wind_data: list[float], cloud_data: list[float], temp_data: list[float]) -> list[dict]:
+    """
+    This function takes the data as input and returns the weather icons.
 
+    Parameters:
+    rain_data (list): The rain data
+    wind_data (list): The wind data
+    cloud_data (list): The cloud data
+    temp_data (list): The temperature data
+    """
+    weather_classification = []
+    temp_icon_data = []
+    for time, prec_mm, wind_data, cloud_pct, temp_c in zip(time_data, rain_data, wind_data, cloud_data, temp_data):
+        weather_classification.append(categorize_weather(prec_mm, wind_data[0], cloud_pct, temp_c))
+        temp_dict = {'x': time.timestamp() * 1000, 'y': temp_c, 'iconPath': ''}
+        temp_icon_data.append(temp_dict)
+    for idx, classification in enumerate(weather_classification):
+        logger.info(f"time: {time_data[idx].time()} Classification: {classification}")
+        if datetime.strptime('00:00:00', '%H:%M:%S').time() <= time_data[idx].time() < datetime.strptime('06:00:00', '%H:%M:%S').time() or datetime.strptime('18:00:00', '%H:%M:%S').time() < time_data[idx].time() <= datetime.strptime('23:00:00', '%H:%M:%S').time():
+            classification += '_night'
+        else:
+            classification += '_day'
+        weather_icon = WeatherIconMap[classification].value
+        temp_icon_data[idx]['iconPath'] = weather_icon
+    return temp_icon_data
 
-
-
+                
+            
 

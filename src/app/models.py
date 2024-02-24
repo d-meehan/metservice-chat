@@ -1,25 +1,25 @@
 from typing import List, Optional, Literal
-from datetime import datetime
+from datetime import datetime, date, time
 from pydantic import BaseModel, Field, ConfigDict
-from ..app.utils.constants import METSERVICE_VARIABLES
+from utils.constants import QUERY_PERIODS, QUERY_TYPES
 
-class ModelResponseToWeatherQuery(BaseModel):
+class QueryClassification(BaseModel):
+    """Model for weather queries."""    
+    query_type: List[QUERY_TYPES] = Field(..., title='Weather query type',
+        description='What type of query has the user sent?')
+    location: Optional[str] = Field(None, title='Location',
+        description='The location the user is asking about.')
+    query_from_date: date = Field(..., title='Start Time',
+        description='The first day to request data for, formatted as :%Y-%m-%d')
+    query_to_date: Optional[date] = Field(None, title='End Time',
+        description='The last day to request data for, formatted as :%Y-%m-%d. Only required if the query_period is multi-day')
+    query_period: List[QUERY_PERIODS] = Field(..., title='Query period',
+        description='The period of time the user is asking about. If they are ask for specific times select a period that includes that time: morning=6-11.59, afternoon=12-17.59, evening=18-23.59, night=0-5.59.')
+
+class ModelResponseToWeatherQuery(QueryClassification):
     """Request model for weather queries."""
-    response: str = Field(..., title='Response', description='Response from WeatherBot to the user query')
-    weather_query_check: bool = Field(..., title='Weather query check', description='Is the user message a weather query?')
-    sufficient_data_check: bool = Field(..., title='Sufficient data check', description='Does the data_store contain sufficient data to answer the query?')
-    data_check_rationale: str = Field(..., title='Data check rationale', description='Reason for the result you have given for the sufficient_data_check')
-    location: str
-    variables: List[METSERVICE_VARIABLES] = Field(
-        default_factory=list, title='Variables', description='List of weather variables allowed for the API call')
-    start_time: datetime = Field(..., title='Start Time',
-                                 description='The first time to request data for, formatted as %Y-%m-%dT%H:00:00Z')
-    end_time: datetime = Field(..., title='End Time',
-                               description='The last time to request data for, formatted as %Y-%m-%dT%H:00:00Z')
-    interval: Literal['h', 'd'] = Field(..., title='Time interval',
-                                        description='Time interval for the data, h = hour, d = day.')
-
-    model_config = ConfigDict(arbritary_types_allowed=True)
+    response: str = Field(..., title='Response',
+        description='Response from WeatherBot to the user query.')
 
 class MetservicePointTimeRequest(BaseModel):
     """Required criteria for Metservice API call."""
@@ -53,8 +53,14 @@ class MetserviceVariable(BaseModel):
 
 class MetserviceTimePointSummary(BaseModel):
     """Model for time point summary in Metservice API."""
-    time: str
+    hour: time
+    variables: List[MetserviceVariable]
+
+class MetservicePeriodSummary(BaseModel):
+    """Model for period summary in Metservice API."""
+    weather_data_type: list[QUERY_TYPES]
+    date: date
     latitude: float
     longitude: float
     location: Optional[str] = None
-    variables: List[MetserviceVariable]
+    hour_summaries: List[MetserviceTimePointSummary]

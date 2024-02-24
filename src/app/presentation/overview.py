@@ -1,16 +1,70 @@
+from datetime import datetime
 from nicegui import ui, Client
 from loguru import logger
-from ..service.chat_service import ChatService
+import asyncio
+from service.chat_service import ChatService
+from models import QueryClassification
+from presentation.components import chart_options, gen_query_series_to_chart, fetch_weather_icons
 
 
 
 def load_interface(chat_service: ChatService) -> None:
+    
     @ui.page('/')
-    async def chat_page():
+    async def chat_page(client: Client):
+
         async def handle_message(e):
-            with ui.spinner():
-                response = await chat_service.process_message(e.value)
-        
+            nonlocal chart
+            spinner = ui.spinner()
+            spinner.set_visibility(True)
+            classification: QueryClassification = await chat_service.process_message(e.value)
+            spinner.set_visibility(False)
+            logger.info(f"Classification: {classification}")
+            logger.info(f"data_store: {chat_service.weather_service.data_store}")
+            if classification.query_type == ["non-weather"]:
+                return
+            lat_lng = await chat_service.weather_service._location_to_lat_lon(classification.location)
+            logger.info(f"lat_lng: {lat_lng}")
+            
+            m.marker(latlng=lat_lng)
+            m.set_center(lat_lng)
+            
+            
+            
+            logger.info(f"Map shown for location: {classification.location}")
+            # find data store that matches classification
+            temp_data = []
+            precip_data = []
+            humidity_data = []
+            wind_data = []
+            cloud_data = []
+            time_data = []
+            for data in chat_service.weather_service.data_store:
+                if data.weather_data_type == classification.query_type and data.location == classification.location and data.date == classification.query_from_date:
+                    for hour_summary in data.hour_summaries:
+                        time_data.append(datetime.combine(data.date, hour_summary.hour))
+                        for variable in hour_summary.variables:
+                            if variable.name == 'air.temperature.at-2m':
+                                temp_data.append(variable.value)
+                            elif variable.name == 'precipitation.rate':
+                                precip_data.append(variable.value)
+                            elif variable.name == 'air.humidity.at-2m':
+                                humidity_data.append(variable.value)
+                            elif variable.name == 'wind.speed.at-10m':
+                                wind_speed = variable.value
+                            elif variable.name == 'wind.direction.at-10m':
+                                wind_direction = variable.value
+                            elif variable.name == 'cloud.cover':
+                                cloud_data.append(variable.value)
+                        if wind_speed and wind_direction:
+                            wind_hour_data = [wind_speed, wind_direction]
+                        wind_data.append(wind_hour_data)
+            temp_icon_data = fetch_weather_icons(time_data=time_data, rain_data=precip_data, wind_data=wind_data, cloud_data=cloud_data, temp_data=temp_data)
+            chart = gen_query_series_to_chart(chart, time_data, temp_icon_data, precip_data, humidity_data, wind_data, cloud_data)
+            chart.options['title']['text'] = f"Weather Forecast for {classification.location}"
+            chart.update()
+
+
         anchor_style = r'a:link, a:visited {color: inherit !important; text-decoration: none; font-weight: 500}'
         ui.add_head_html(f'<style>{anchor_style}</style>')
 
@@ -18,22 +72,28 @@ def load_interface(chat_service: ChatService) -> None:
         ui.query('.q-page').classes('flex')
         ui.query('.nicegui-content').classes('w-full')
 
-        with ui.tabs().classes('w-full') as tabs:
-            chat_tab = ui.tab('Chat')
-            logs_tab = ui.tab('Logs')
-        with ui.tab_panels(tabs, value=chat_tab).classes(
-            'w-full max-w-2xl mx-auto flex-grow items-stretch'
-            ):
-            with ui.tab_panel(chat_tab).classes('items-stretch'):
-                chat_service.chat_ui_manager.display_messages()
-            with ui.tab_panel(logs_tab):
-                log = ui.log().classes('w-full h-full')
-
-        with ui.footer().classes('bg-white'), ui.column().classes('w-full max-w-3xl mx-auto my-6'):
-            with ui.row().classes('w-full no-wrap items-center'):
-                placeholder = 'message'
-                text = ui.input(placeholder=placeholder).props('rounded outlined input-class=mx-3') \
-                    .classes('w-full self-center').on('keydown.enter', lambda e: handle_message(text))
-
-            ui.markdown('simple chat app built with [NiceGUI](https://nicegui.io)') \
-                .classes('text-xs self-end mr-8 m-[-1em] text-primary')
+        with ui.row().classes('h-full w-full no-wrap items-center items-stretch'):
+            with ui.column().classes('w-1/3 max-w-1/3 items-stretch flex-grow mx-auto h-full'):
+                with ui.scroll_area().classes('w-full h-2/3'):
+                    chat_service.chat_ui_manager.display_messages()
+                with ui.row().classes('w-1/3 no-wrap items-center absolute bottom-0 mx-auto'), ui.column().classes('w-full'):
+                    placeholder = 'message'
+                    text = ui.input(placeholder=placeholder).props('rounded outlined') \
+                        .classes('w-5/6 self-center').on('keydown.enter', lambda e: handle_message(text)).on('keydown.enter', lambda e: text.set_value(None))
+                    with text:
+                        ui.button(icon='send').on('click', lambda e: handle_message(text)).props('round dense flat').on('click', lambda e: text.set_value(None))
+                    ui.markdown('WeatherBot') \
+                        .classes('text-xs self-start mr-8 m-[-1em] text-primary')
+            with ui.column().classes('w-2/3 max-w-2/3 mx-auto items-stretch flex-grow px-4 h-full'):
+                m = ui.leaflet(center=(-36.85088270000001, 174.7644881), zoom=10).classes('w-full h-2/3')
+                m.clear_layers()
+                m.tile_layer(
+                    url_template=r'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                    options={
+                        'attribution': '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                        'subdomains': 'abcd',
+                        'maxZoom': 20
+                    }
+                )
+                chart = ui.highchart(options=chart_options, extras=[
+                                    'windbarb', 'accessibility']).classes('w-full h-full')

@@ -1,4 +1,6 @@
 from typing import Literal
+from enum import Enum
+from datetime import datetime
 
 METSERVICE_VARIABLES = Literal[
     'air.humidity.at-2m',
@@ -46,25 +48,91 @@ METSERVICE_VARIABLES = Literal[
     'sea.temperature.at-surface-anomaly',
 ]
 
-SYSTEM_PROMPT = (
+CLASSIFICATION_PROMPT = (
+    "CURRENT DATE AND TIME: {current_datetime}.\n"
+    "ROLE: Your role is to classify the user query so that we can request the right data.\n\n"
+
+    "GUIDELINES:\n"
+    "- You can only request data ten days in the future and seven days in the past.\n"
+    "- Leave `location` empty if one is not specified in the query and the user is not referring to a previously stated location, we'll get the user's location.\n"
+    "- Consider the context of the conversation when classifying the query, especially when it comes to query_from_date and location because the user's query may relate to something they've said previously.\n"
+)
+
+QUERY_RESPONSE_PROMPT = (
     "CURRENT DATE AND TIME: {current_datetime}.\n"
     "USER'S LOCATION: {user_location}.\n"
-    "ROLE: You are WeatherBot, designed to respond to weather queries with JSON structured responses.\n\n"
+    "ROLE: You are WeatherBot, designed to respond to weather queries using only data provided to you.\n\n"
 
     "GUIDELINES:\n"
     "- Respond to non-weather queries briefly, reminding users of your primary function.\n"
-    "- For weather-related queries, use data from the DATA STORE, following these rules:\n"
-    "   * Provide succinct weather summaries based on available data.\n"
-    "   * If data is sufficient, detail your response with relevant weather information.\n"
-    "   * Insufficient data? Set `sufficient_data_check` to False, request more using variables, location, times.\n"
-    "   * Limit API calls by utilizing existing data store efficiently.\n"
-    "   * Specify in the response if awaiting data for a complete answer.\n"
-    "   * For API requests, ensure they match the query’s detail needs (e.g., hourly data for tomorrow’s weather).\n"
-    "- Choose only relevant variables for queries.\n"
-    "- Leave `location` empty if unspecified in the query. For unspecified times, request data to cover the query scope.\n"
-    "- Request data should align with hourly marks; for current weather, include the last hour and an additional hour.\n"
-    "- If answering without additional data requests, outline your data usage in the response fields (variables, location, times).\n\n"
+    "- Provide succinct weather summaries based only on available data.\n"
 
-    "DATA STORE: \n{data_store}\n"
-    "VARIABLES: \n{vars}\n"
+    "DATA STORE: \n{data_store}\n\n"
 )
+
+QUERY_TYPES = Literal['non-weather', 'general weather', 'temperature',
+                      'rain', 'cloud', 'wind', 'sea, boat, surf and fishing']
+QUERY_PERIODS = Literal['morning', 'afternoon',
+                        'evening', 'night', 'whole day', 'multi-day']
+
+query_variable_map = {
+    'general weather': [
+        'air.humidity.at-2m',
+        'air.temperature.at-2m',
+        'cloud.cover',
+        'precipitation.rate',
+        'wind.direction.at-10m',
+        'wind.speed.at-10m',
+    ],
+    'temperature': [
+        'air.temperature.at-2m',
+    ],
+    'rain': [
+        'precipitation.rate',
+    ],
+    'cloud': [
+        'cloud.cover',
+    ],
+    'wind': [
+        'wind.direction.at-10m',
+        'wind.speed.at-10m',
+    ],
+    'sea, boat, surf and fishing': [
+        'sea.temperature.at-surface',
+        'wave.height',
+        'wave.height.max',
+        'wave.direction.mean',
+        'wave.direction.peak',
+        'wave.period.peak',
+        'wind.speed.at-10m',
+        'wind.speed.gust.at-10m',
+        'wind.direction.at-10m',
+    ],
+}
+
+query_time_map = {
+    'morning': datetime.strptime('06:00:00', '%H:00:00'),
+    'afternoon': datetime.strptime('12:00:00', '%H:00:00'),
+    'evening': datetime.strptime('18:00:00', '%H:00:00'),
+    'night': datetime.strptime('00:00:00', '%H:00:00'),
+    'whole day': datetime.strptime('00:00:00', '%H:00:00'),
+    'multi-day': datetime.strptime('00:00:00', '%H:00:00'),
+}
+
+
+class WeatherIconMap(Enum):
+    frost_day = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/frost-day.svg'
+    frost_night = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/frost-night.svg'
+    fine_day = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/clear-day.svg'
+    fine_night = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/clear-night.svg'
+    partly_cloudy_day = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/cloudy-1-day.svg'
+    partly_cloudy_night = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/cloudy-1-night.svg'
+    cloudy_day = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/cloudy.svg'
+    cloudy_night = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/cloudy.svg'
+    few_showers_day = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/rainy-1-day.svg'
+    few_showers_night = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/rainy-1-night.svg'
+    showers_day = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/rainy-2-day.svg'
+    showers_night = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/rainy-2-night.svg'
+    rain_day = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/rainy-3-day.svg'
+    rain_night = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/rainy-3-night.svg'
+    wind = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/wind.svg'

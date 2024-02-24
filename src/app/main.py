@@ -1,8 +1,8 @@
-from src.app.presentation.overview import load_interface
-from src.app.presentation.ui_manager import ChatUIManager
-from src.app.service.chat_service import ChatService
-from src.app.service.weather_service import WeatherService
-from src.app.service.user_service import UserService
+from presentation.overview import load_interface
+from presentation.ui_manager import ChatUIManager
+from service.chat_service import ChatService
+from service.weather_service import WeatherService
+from service.user_service import UserService
 from nicegui import ui
 from loguru import logger
 
