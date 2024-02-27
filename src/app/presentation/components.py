@@ -1,7 +1,6 @@
-from loguru import logger
-from typing import Tuple
-from nicegui import ui
 from datetime import datetime
+from loguru import logger
+from nicegui import ui
 from utils.constants import WeatherIconMap
 
 # Basic Highchart configuration for weather visualization
@@ -207,8 +206,8 @@ def fetch_weather_icons(time_data: list[datetime], rain_data: list[float], wind_
     """
     weather_classification = []
     temp_icon_data = []
-    for time, prec_mm, wind_data, cloud_pct, temp_c in zip(time_data, rain_data, wind_data, cloud_data, temp_data):
-        weather_classification.append(categorize_weather(prec_mm, wind_data[0], cloud_pct, temp_c))
+    for time, prec_mm, wind, cloud_pct, temp_c in zip(time_data, rain_data, wind_data, cloud_data, temp_data):
+        weather_classification.append(categorize_weather(prec_mm, wind[0], cloud_pct, temp_c))
         temp_dict = {'x': time.timestamp() * 1000, 'y': temp_c, 'iconPath': ''}
         temp_icon_data.append(temp_dict)
     for idx, classification in enumerate(weather_classification):

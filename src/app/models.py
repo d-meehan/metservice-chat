@@ -1,11 +1,11 @@
-from typing import List, Optional, Literal
-from datetime import datetime, date, time
+from typing import List, Optional
+from datetime import date, time
 from pydantic import BaseModel, Field, ConfigDict
-from utils.constants import QUERY_PERIODS, QUERY_TYPES
+from utils.constants import QueryPeriods, QueryTypes
 
 class QueryClassification(BaseModel):
     """Model for weather queries."""    
-    query_type: List[QUERY_TYPES] = Field(..., title='Weather query type',
+    query_type: List[QueryTypes] = Field(..., title='Weather query type',
         description='What type of query has the user sent?')
     location: Optional[str] = Field(None, title='Location',
         description='The location the user is asking about.')
@@ -13,7 +13,7 @@ class QueryClassification(BaseModel):
         description='The first day to request data for, formatted as :%Y-%m-%d')
     query_to_date: Optional[date] = Field(None, title='End Time',
         description='The last day to request data for, formatted as :%Y-%m-%d. Only required if the query_period is multi-day')
-    query_period: List[QUERY_PERIODS] = Field(..., title='Query period',
+    query_period: List[QueryPeriods] = Field(..., title='Query period',
         description='The period of time the user is asking about. If they are ask for specific times select a period that includes that time: morning=6-11.59, afternoon=12-17.59, evening=18-23.59, night=0-5.59.')
 
 class ModelResponseToWeatherQuery(QueryClassification):
@@ -58,7 +58,7 @@ class MetserviceTimePointSummary(BaseModel):
 
 class MetservicePeriodSummary(BaseModel):
     """Model for period summary in Metservice API."""
-    weather_data_type: list[QUERY_TYPES]
+    weather_data_type: list[QueryTypes]
     date: date
     latitude: float
     longitude: float

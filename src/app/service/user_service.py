@@ -1,4 +1,4 @@
-from nicegui import ui, app
+from nicegui import ui
 from loguru import logger
 
 class UserService:

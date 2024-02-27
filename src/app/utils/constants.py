@@ -2,7 +2,7 @@ from typing import Literal
 from enum import Enum
 from datetime import datetime
 
-METSERVICE_VARIABLES = Literal[
+MetserviceVariables = Literal[
     'air.humidity.at-2m',
     'air.pressure.at-sea-level',
     'air.temperature.at-2m',
@@ -48,7 +48,7 @@ METSERVICE_VARIABLES = Literal[
     'sea.temperature.at-surface-anomaly',
 ]
 
-CLASSIFICATION_PROMPT = (
+ClassificationPrompt = (
     "CURRENT DATE AND TIME: {current_datetime}.\n"
     "ROLE: Your role is to classify the user query so that we can request the right data.\n\n"
 
@@ -58,7 +58,7 @@ CLASSIFICATION_PROMPT = (
     "- Consider the context of the conversation when classifying the query, especially when it comes to query_from_date and location because the user's query may relate to something they've said previously.\n"
 )
 
-QUERY_RESPONSE_PROMPT = (
+QueryResponsePrompt = (
     "CURRENT DATE AND TIME: {current_datetime}.\n"
     "USER'S LOCATION: {user_location}.\n"
     "ROLE: You are WeatherBot, designed to respond to weather queries using only data provided to you.\n\n"
@@ -70,9 +70,9 @@ QUERY_RESPONSE_PROMPT = (
     "DATA STORE: \n{data_store}\n\n"
 )
 
-QUERY_TYPES = Literal['non-weather', 'general weather', 'temperature',
+QueryTypes = Literal['non-weather', 'general weather', 'temperature',
                       'rain', 'cloud', 'wind', 'sea, boat, surf and fishing']
-QUERY_PERIODS = Literal['morning', 'afternoon',
+QueryPeriods = Literal['morning', 'afternoon',
                         'evening', 'night', 'whole day', 'multi-day']
 
 query_variable_map = {

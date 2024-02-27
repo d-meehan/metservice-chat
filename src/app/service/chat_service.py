@@ -3,13 +3,13 @@ from datetime import datetime
 from typing import TypeVar
 from pydantic import BaseModel
 from loguru import logger
-from nicegui import app, ui
+from nicegui import app
 import instructor
 import googlemaps
 from dotenv import load_dotenv
 import openai
 from models import ModelResponseToWeatherQuery, Message, QueryClassification
-from utils.constants import METSERVICE_VARIABLES, CLASSIFICATION_PROMPT, QUERY_RESPONSE_PROMPT
+from utils.constants import MetserviceVariables, ClassificationPrompt, QueryResponsePrompt
 from presentation.ui_manager import ChatUIManager
 from service.weather_service import WeatherService
 
@@ -26,16 +26,7 @@ class ChatService:
         self.weather_service = weather_service
         self.chat_ui_manager = chat_ui_manager
 
-    async def process_message(self, user_message: str) -> QueryClassification:
-        self.chat_ui_manager.add_message_to_log(
-            Message(
-                role="user", 
-                content=user_message,
-                stamp=datetime.now().strftime("%H:%M"), 
-                avatar="", 
-                sent=True
-                )
-            )
+    async def process_message(self) -> QueryClassification:
 
         classification: QueryClassification = await self._classify_query(response_model=QueryClassification)
         if classification.location == []:
@@ -65,14 +56,9 @@ class ChatService:
         #     response.query_from_date == stored_data.date
         #     for stored_data in self.weather_service.data_store):
         self.chat_ui_manager.add_message_to_log(
-            Message(
-                role="WeatherBot", 
-                content=response, 
-                stamp=datetime.now().strftime("%H:%M"), 
-                avatar="", 
-                sent=False
+                role="WeatherBot",
+                content=response,
                 )
-            )
         return classification
 
 
@@ -88,7 +74,7 @@ class ChatService:
         app_storage (dict): The app storage
         """
 
-        system_prompt = CLASSIFICATION_PROMPT.format(
+        system_prompt = ClassificationPrompt.format(
             current_datetime=datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
         )
 
@@ -144,7 +130,7 @@ class ChatService:
         else:
             location = "unknown location"
 
-        system_prompt = QUERY_RESPONSE_PROMPT.format(
+        system_prompt = QueryResponsePrompt.format(
             current_datetime=datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
             user_location=location,
             data_store=formatted_data,
