@@ -59,6 +59,7 @@ class MetserviceTimePointSummary(BaseModel):
 class MetservicePeriodSummary(BaseModel):
     """Model for period summary in Metservice API."""
     weather_data_type: list[QueryTypes]
+    period_type: QueryPeriods
     date: date
     latitude: float
     longitude: float

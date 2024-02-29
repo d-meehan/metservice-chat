@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 import openai
 from models import ModelResponseToWeatherQuery, Message, QueryClassification
 from utils.constants import MetserviceVariables, ClassificationPrompt, QueryResponsePrompt
-from presentation.ui_manager import ChatUIManager
+from presentation.ui_manager import UIManager
 from service.weather_service import WeatherService
 
 load_dotenv()
@@ -22,12 +22,33 @@ gmaps = googlemaps.Client(key=os.environ['GOOGLE_MAPS_API_KEY'])
 ResponseModel = TypeVar("ResponseModel", bound=BaseModel)
 
 class ChatService:
-    def __init__(self, weather_service: WeatherService, chat_ui_manager: ChatUIManager) -> None:
+    def __init__(self, weather_service: WeatherService, ui_manager: UIManager) -> None:
         self.weather_service = weather_service
-        self.chat_ui_manager = chat_ui_manager
+        self.ui_manager = ui_manager
+
+    async def classify_query(self, query: str) -> QueryClassification:
+        self.ui_manager.toggle_visual_processing(show_spinner=True)
+        self.ui_manager.add_message(
+                role="user",
+                content=query,
+                )
+        classification: QueryClassification = await self._classify_query(response_model=QueryClassification)
+        if classification.location == []:
+            if 'location' not in app.storage.user:
+                try:
+                    latitude = await self.weather_service.user_service.user_latitude()
+                    longitude = await self.weather_service.user_service.user_longitude()
+                    app.storage.user['latitude'] = latitude
+                    app.storage.user['longitude'] = longitude
+                    app.storage.user['location'] = await self.weather_service._lat_lon_to_location(latitude, longitude)
+                except Exception as e:
+                    logger.error(
+                        f"No location provided in query and user did not respond to request for location: {e}")
+            classification.location = app.storage.user['location']
+        return classification
+
 
     async def process_message(self) -> QueryClassification:
-
         classification: QueryClassification = await self._classify_query(response_model=QueryClassification)
         if classification.location == []:
             if 'location' not in app.storage.user:
@@ -55,7 +76,7 @@ class ChatService:
         #     response.location == stored_data.location and
         #     response.query_from_date == stored_data.date
         #     for stored_data in self.weather_service.data_store):
-        self.chat_ui_manager.add_message_to_log(
+        self.ui_manager.add_message(
                 role="WeatherBot",
                 content=response,
                 )
@@ -84,7 +105,7 @@ class ChatService:
                     "content": system_prompt
                 },
             ]
-        chat_log = self.chat_ui_manager.chat_log
+        chat_log = self.ui_manager.chat_log
 
         for message in chat_log:
             if message.role == "WeatherBot":
@@ -142,7 +163,7 @@ class ChatService:
                     "content": system_prompt
                 },
             ]
-        chat_log = self.chat_ui_manager.chat_log
+        chat_log = self.ui_manager.chat_log
 
         for message in chat_log:
             if message.role == "WeatherBot":

@@ -12,21 +12,44 @@ class WeatherService:
         self.data_store: list[MetservicePeriodSummary] = []
         self.user_service = user_service
 
-    async def get_weather_data(self, request: QueryClassification) -> None:
-        metservice_request = await self._create_API_request(request)
-        metservice_response = await self._metservice_api_call(metservice_request)
+    async def get_weather_data(self, classification: QueryClassification) -> None:
+        while not any(
+            (
+                (
+                    classification.query_type == stored_data.weather_data_type or
+                    classification.query_type not in ["general weather", "sea, boat, surf and fishing"] and
+                    stored_data.weather_data_type != "general weather"
+                ) and
+                (
+                    classification.query_period == stored_data.period_type or
+                    stored_data.period_type in ["whole_day", "multi-day"]
+                ) and
+                classification.location == stored_data.location and
+                classification.query_from_date == stored_data.date
+            )
+            for stored_data in self.data_store
+        ):
+            logger.info("Conditions not met, fetching new weather data.")
+            metservice_request = await self._create_API_request(classification)
+            metservice_response = await self._metservice_api_call(metservice_request)
         
-        for new_data in metservice_response:
-            new_data.location = request.location
-            new_data.weather_data_type = request.query_type
+        if metservice_response:
+            await self._store_weather_data(metservice_response, classification)
+
+    async def _store_weather_data(self, metservice_response: list[MetservicePeriodSummary], classification: QueryClassification) -> None:
+        for data in metservice_response:
+            data.location = classification.location
+            data.weather_data_type = classification.query_type
+            data.period_type = classification.query_period
             if not any(
-                data.date == new_data.date and 
-                data.location == new_data.location and
-                data.weather_data_type == new_data.weather_data_type
-                for data in self.data_store):
-                self.data_store.append(new_data)
+                stored_data.date == data.date and 
+                stored_data.location == data.location and
+                stored_data.weather_data_type == data.weather_data_type and
+                stored_data.hour_summaries == hour_summary 
+                for stored_data in self.data_store for hour_summary in data.hour_summaries):
+                self.data_store.append(data)
             else:
-                logger.info(f"Data already exists for time: {new_data.date}, latitude: {new_data.latitude}, longitude: {new_data.longitude}")
+                logger.info(f"Data already exists for time: {data.date}, latitude: {data.latitude}, longitude: {data.longitude}")
 
     async def _create_API_request(self, request: QueryClassification) -> MetservicePointTimeRequest:
         logger.info(f"Request: {request}")

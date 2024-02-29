@@ -1,12 +1,65 @@
+from collections.abc import Awaitable, Callable
 from datetime import datetime
+
 from nicegui import ui
 from models import Message
 
-class ChatUIManager:
+from presentation.components import chart_options
+
+class UIManager:
     def __init__(self) -> None:
         self.chat_log: list[Message] = []
+        self.map = None
+        self.chart = None
+        self.spinner = None
+        self.send_button = None
 
-    def add_message_to_log(self, role: str, content: str):
+    def load_ui(self) -> None:
+        anchor_style = r'a:link, a:visited {color: inherit !important; text-decoration: none; font-weight: 500}'
+        ui.add_head_html(f'<style>{anchor_style}</style>')
+        ui.query('.q-page').classes('flex')
+        ui.query('.nicegui-content').classes('w-full')
+
+    def toggle_visual_processing(self, show_spinner: bool):
+        """Toggles visibility of the UI elements based on the user interaction."""
+        self.spinner.set_visibility(show_spinner)
+        self.send_button.set_visibility(not show_spinner)
+
+    def load_chat_column(self, callback: Callable[[ui.input], Awaitable]) -> None:
+        with ui.column().classes('w-1/3 max-w-2xl items-stretch mx-auto h-full max-w-2xl px-4 h-full'):
+            with ui.tab_panel(name='chat').classes('w-full h-5/6 px-4 border rounded-lg border-gray-300 max-w-2xl items-stretch overflow-auto flex-column-reverse overflow-anchor-auto'):
+                self.display_messages()
+            with ui.row().classes('w-full h-1/6 no-wrap bottom-5 mx-auto'):
+                placeholder = 'message'
+                text = ui.input(placeholder=placeholder).props('rounded outlined').classes(
+                    'w-full self-center').on('keydown.enter', lambda e: callback(text)).on(
+                        'keydown.enter', lambda e: text.set_value(None))
+                with text:
+                    self.send_button = ui.button(icon='send').on('click', lambda e: callback(text)).props(
+                        'round dense flat').on('click', lambda e: text.set_value(None))
+                    self.spinner = ui.spinner(size='3em').classes('right-0 self-center')
+                    self.spinner.set_visibility(False)
+            ui.markdown('WeatherBot').classes(
+                'absolute bottom-4 text-xs mr-7 text-primary')
+            
+    def load_data_visualization(self) -> None:
+            with ui.column().classes('w-2/3 max-w-2/3 mx-auto items-stretch flex-grow px-4 h-full'):
+                m = ui.leaflet(center=(-36.85088270000001, 174.7644881), zoom=10).classes('w-full h-2/3')
+                m.clear_layers()
+                m.tile_layer(
+                    url_template=r'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                    options={
+                        'attribution': '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                        'subdomains': 'abcd',
+                        'maxZoom': 20
+                    }
+                )
+                self.map = m
+                self.chart = ui.highchart(options=chart_options, extras=[
+                                    'windbarb', 'accessibility']).classes(
+                                        'w-full h-full')
+
+    def add_message(self, role: str, content: str):
         if role == "user":
             avatar = "https://www.gravatar.com/avatar/"
             sent = True

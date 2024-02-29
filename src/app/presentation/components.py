@@ -3,6 +3,14 @@ from loguru import logger
 from nicegui import ui
 from utils.constants import WeatherIconMap
 
+def configure_page_layout() -> None:
+        anchor_style = r'a:link, a:visited {color: inherit !important; text-decoration: none; font-weight: 500}'
+        ui.add_head_html(f'<style>{anchor_style}</style>')
+
+        # # the queries below are used to expand the content down to the footer (content can then use flex-grow to expand)
+        ui.query('.q-page').classes('flex')
+        ui.query('.nicegui-content').classes('w-full')
+
 # Basic Highchart configuration for weather visualization
 chart_options = {
     'time': {'useUTC': False},

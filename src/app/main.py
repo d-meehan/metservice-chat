@@ -1,5 +1,5 @@
 from presentation.overview import load_interface
-from presentation.ui_manager import ChatUIManager
+from presentation.ui_manager import UIManager
 from service.chat_service import ChatService
 from service.weather_service import WeatherService
 from service.user_service import UserService
@@ -10,8 +10,8 @@ def main():
     logger.info("Starting WeatherBot")
     user_service = UserService()
     weather_service = WeatherService(user_service)
-    chat_ui_manager = ChatUIManager()
-    chat_service = ChatService(weather_service, chat_ui_manager)
+    ui_manager = UIManager()
+    chat_service = ChatService(weather_service, ui_manager)
     load_interface(chat_service)
     ui.run(title="WeatherBot", storage_secret="secret-key")
 
