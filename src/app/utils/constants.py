@@ -2,52 +2,6 @@ from typing import Literal
 from enum import Enum
 from datetime import datetime
 
-MetserviceVariables = Literal[
-    'air.humidity.at-2m',
-    'air.pressure.at-sea-level',
-    'air.temperature.at-2m',
-    'air.visibility',
-    'atmosphere.convective.potential.energy',
-    'cloud.base.height',
-    'cloud.cover',
-    'precipitation.rate',
-    'radiation.flux.downward.longwave',
-    'radiation.flux.downward.shortwave',
-    'wind.direction.at-10m',
-    'wind.direction.at-100m',
-    'wind.speed.at-10m',
-    'wind.speed.at-100m',
-    'wind.speed.eastward.at-100m',
-    'wind.speed.eastward.at-10m',
-    'wind.speed.gust.at-10m',
-    'wind.speed.northward.at-100m',
-    'wind.speed.northward.at-10m',
-    'wave.height',
-    'wave.height.max',
-    'wave.direction.peak',
-    'wave.period.peak',
-    'wave.height.above-8s',
-    'wave.height.below-8s',
-    'wave.period.above-8s.peak',
-    'wave.period.below-8s.peak',
-    'wave.direction.above-8s.peak',
-    'wave.direction.below-8s.peak',
-    'wave.direction.mean',
-    'wave.directional-spread',
-    'wave.period.tm01.mean',
-    'wave.period.tm02.mean',
-    'current.speed.eastward.at-sea-surface',
-    'current.speed.eastward.at-sea-surface-no-tide',
-    'current.speed.eastward.barotropic',
-    'current.speed.eastward.barotropic-no-tide',
-    'current.speed.northward.at-sea-surface',
-    'current.speed.northward.at-sea-surface-no-tide',
-    'current.speed.northward.barotropic',
-    'current.speed.northward.barotropic-no-tide',
-    'sea.temperature.at-surface',
-    'sea.temperature.at-surface-anomaly',
-]
-
 ClassificationPrompt = (
     "CURRENT DATE AND TIME: {current_datetime}.\n"
     "ROLE: Your role is to classify the user query so that we can request the right data.\n\n"
@@ -70,53 +24,87 @@ QueryResponsePrompt = (
     "DATA STORE: \n{data_store}\n\n"
 )
 
-QueryTypes = Literal['non-weather', 'general weather', 'temperature',
-                      'rain', 'cloud', 'wind', 'sea, boat, surf and fishing']
-QueryPeriods = Literal['morning', 'afternoon',
-                        'evening', 'night', 'whole day', 'multi-day']
+class QueryTypesEnum(Enum):
+    NON_WEATHER = 'non-weather'
+    GENERAL_WEATHER = 'general weather'
+    TEMPERATURE = 'temperature'
+    RAIN = 'rain'
+    CLOUD ='cloud'
+    WIND = 'wind'
+    SEA_BOAT_SURF_FISHING = 'sea, boat, surf and fishing'
+
+class QueryPeriodsEnum(Enum):
+    MORNING = 'morning'
+    AFTERNOON = 'afternoon'
+    EVENING = 'evening'
+    NIGHT = 'night'
+    WHOLE_DAY = 'whole day'
+    MULTI_DAY = 'multi-day'
+
+weather_unit_map = {
+    "degreeK": (lambda x: x - 273.15, "C"),
+    "meterPerSecond": (lambda x: x * 3.6, "km/h"),
+    "percent": (lambda x: x, "%"),
+    "millimeterPerHour": (lambda x: x, "mm/h"),
+}
+
+class WeatherVarMap(Enum):
+    humidity = 'air.humidity.at-2m'
+    temp = 'air.temperature.at-2m'
+    cloud_cover = 'cloud.cover'
+    rain = 'precipitation.rate'
+    wind_direction = 'wind.direction.at-10m'
+    wind_speed = 'wind.speed.at-10m'
+    sea_temperature = 'sea.temperature.at-surface'
+    wave_height = 'wave.height'
+    wave_height_max = 'wave.height.max'
+    wave_direction_mean = 'wave.direction.mean'
+    wave_direction_peak = 'wave.direction.peak'
+    wave_period_peak = 'wave.period.peak'
+    wind_speed_gust = 'wind.speed.gust.at-10m'
 
 query_variable_map = {
-    'general weather': [
-        'air.humidity.at-2m',
-        'air.temperature.at-2m',
-        'cloud.cover',
-        'precipitation.rate',
-        'wind.direction.at-10m',
-        'wind.speed.at-10m',
+    QueryTypesEnum.GENERAL_WEATHER: [
+        WeatherVarMap.humidity,
+        WeatherVarMap.temp,
+        WeatherVarMap.cloud_cover,
+        WeatherVarMap.rain,
+        WeatherVarMap.wind_direction,
+        WeatherVarMap.wind_speed,
     ],
-    'temperature': [
-        'air.temperature.at-2m',
+    QueryTypesEnum.TEMPERATURE: [
+        WeatherVarMap.temp,
     ],
-    'rain': [
-        'precipitation.rate',
+    QueryTypesEnum.RAIN: [
+        WeatherVarMap.rain,
     ],
-    'cloud': [
-        'cloud.cover',
+    QueryTypesEnum.CLOUD: [
+        WeatherVarMap.cloud_cover,
     ],
-    'wind': [
-        'wind.direction.at-10m',
-        'wind.speed.at-10m',
+    QueryTypesEnum.WIND: [
+        WeatherVarMap.wind_direction,
+        WeatherVarMap.wind_speed,
     ],
-    'sea, boat, surf and fishing': [
-        'sea.temperature.at-surface',
-        'wave.height',
-        'wave.height.max',
-        'wave.direction.mean',
-        'wave.direction.peak',
-        'wave.period.peak',
-        'wind.speed.at-10m',
-        'wind.speed.gust.at-10m',
-        'wind.direction.at-10m',
+    QueryTypesEnum.SEA_BOAT_SURF_FISHING: [
+        WeatherVarMap.sea_temperature,
+        WeatherVarMap.wave_height,
+        WeatherVarMap.wave_height_max,
+        WeatherVarMap.wave_direction_mean,
+        WeatherVarMap.wave_direction_peak,
+        WeatherVarMap.wave_period_peak,
+        WeatherVarMap.wind_speed,
+        WeatherVarMap.wind_speed_gust,
+        WeatherVarMap.wind_direction,
     ],
 }
 
-query_time_map = {
-    'morning': datetime.strptime('06:00:00', '%H:00:00'),
-    'afternoon': datetime.strptime('12:00:00', '%H:00:00'),
-    'evening': datetime.strptime('18:00:00', '%H:00:00'),
-    'night': datetime.strptime('00:00:00', '%H:00:00'),
-    'whole day': datetime.strptime('00:00:00', '%H:00:00'),
-    'multi-day': datetime.strptime('00:00:00', '%H:00:00'),
+
+period_hours_map = {
+    QueryPeriodsEnum.MORNING: list(range(6, 11)),  # 5AM to 11AM
+    QueryPeriodsEnum.AFTERNOON: list(range(12, 17)),  # 12PM to 4PM
+    QueryPeriodsEnum.EVENING: list(range(18, 23)),  # 5PM to 8PM
+    QueryPeriodsEnum.NIGHT: list(range(0, 5)),  # 9PM to 4AM
+    QueryPeriodsEnum.WHOLE_DAY: list(range(0, 23)),  # Whole day
 }
 
 

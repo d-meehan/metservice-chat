@@ -9,7 +9,7 @@ import googlemaps
 from dotenv import load_dotenv
 import openai
 from models import ModelResponseToWeatherQuery, Message, QueryClassification
-from utils.constants import MetserviceVariables, ClassificationPrompt, QueryResponsePrompt
+from utils.constants import ClassificationPrompt, QueryResponsePrompt
 from presentation.ui_manager import UIManager
 from service.weather_service import WeatherService
 
@@ -48,39 +48,13 @@ class ChatService:
         return classification
 
 
-    async def process_message(self) -> QueryClassification:
-        classification: QueryClassification = await self._classify_query(response_model=QueryClassification)
-        if classification.location == []:
-            if 'location' not in app.storage.user:
-                try:
-                    latitude = await self.weather_service.user_service.user_latitude()
-                    longitude = await self.weather_service.user_service.user_longitude()
-                    app.storage.user['location'] = await self.weather_service._lat_lon_to_location(latitude, longitude)
-                except Exception as e:
-                    logger.error(
-                        f"No location provided in query and user did not respond to request for location: {e}")
-            classification.location = app.storage.user['location']
-
-
-        while not any(
-            classification.query_type == stored_data.weather_data_type and
-            classification.location == stored_data.location and
-            classification.query_from_date == stored_data.date
-            for stored_data in self.weather_service.data_store) and not \
-                classification.query_type == ["non-weather"]:
-                await self.weather_service.get_weather_data(classification)
-
+    async def process_message(self) -> None:
         response = await self._answer_query()
-        # if any(
-        #     response.query_type == stored_data.weather_data_type and
-        #     response.location == stored_data.location and
-        #     response.query_from_date == stored_data.date
-        #     for stored_data in self.weather_service.data_store):
         self.ui_manager.add_message(
                 role="WeatherBot",
                 content=response,
                 )
-        return classification
+        self.ui_manager.toggle_visual_processing(show_spinner=False)
 
 
     async def _classify_query(self, response_model: QueryClassification) -> QueryClassification:
@@ -139,7 +113,7 @@ class ChatService:
         """
 
         formatted_data = [
-            f"Date: {data.date}, Query type(s): {data.weather_data_type}, Location: {data.location}  \n {
+            f"Date: {data.date}, Query type(s): {data.weather_data_types}, Location: {data.location}, Period(s): {data.period_types}  \n {
                 '\n\n'.join(
                     f'Time: {time.hour} \n {'\n'.join(f'{variable.name}: {variable.value}{variable.units}' for variable in time.variables)}' for time in data.hour_summaries)}"
             for data in self.weather_service.data_store

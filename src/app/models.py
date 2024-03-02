@@ -1,11 +1,11 @@
-from typing import List, Optional
+from typing import Optional
 from datetime import date, time
 from pydantic import BaseModel, Field, ConfigDict
-from utils.constants import QueryPeriods, QueryTypes
+from utils.constants import QueryPeriodsEnum, QueryTypesEnum
 
 class QueryClassification(BaseModel):
     """Model for weather queries."""    
-    query_type: List[QueryTypes] = Field(..., title='Weather query type',
+    query_type: list[QueryTypesEnum] = Field(..., title='Weather query type',
         description='What type of query has the user sent?')
     location: Optional[str] = Field(None, title='Location',
         description='The location the user is asking about.')
@@ -13,7 +13,7 @@ class QueryClassification(BaseModel):
         description='The first day to request data for, formatted as :%Y-%m-%d')
     query_to_date: Optional[date] = Field(None, title='End Time',
         description='The last day to request data for, formatted as :%Y-%m-%d. Only required if the query_period is multi-day')
-    query_period: List[QueryPeriods] = Field(..., title='Query period',
+    query_period: list[QueryPeriodsEnum] = Field(..., title='Query period',
         description='The period of time the user is asking about. If they are ask for specific times select a period that includes that time: morning=6-11.59, afternoon=12-17.59, evening=18-23.59, night=0-5.59.')
 
 class ModelResponseToWeatherQuery(QueryClassification):
@@ -25,7 +25,7 @@ class MetservicePointTimeRequest(BaseModel):
     """Required criteria for Metservice API call."""
     latitude: float
     longitude: float
-    variables: List[str]
+    variables: list[str]
     from_datetime: str = Field(..., title='Start time',
         description='Start time for the data. formatted as %Y-%m-%dT%H:00:00Z')
     interval: Optional[str] = Field(
@@ -54,14 +54,14 @@ class MetserviceVariable(BaseModel):
 class MetserviceTimePointSummary(BaseModel):
     """Model for time point summary in Metservice API."""
     hour: time
-    variables: List[MetserviceVariable]
+    variables: list[MetserviceVariable]
 
 class MetservicePeriodSummary(BaseModel):
     """Model for period summary in Metservice API."""
-    weather_data_type: list[QueryTypes]
-    period_type: QueryPeriods
+    weather_data_types: list[QueryTypesEnum]
+    period_types: list[QueryPeriodsEnum]
     date: date
     latitude: float
     longitude: float
     location: Optional[str] = None
-    hour_summaries: List[MetserviceTimePointSummary]
+    hour_summaries: list[MetserviceTimePointSummary]

@@ -1,10 +1,12 @@
 from collections.abc import Awaitable, Callable
 from datetime import datetime
+from loguru import logger
 
 from nicegui import ui
-from models import Message
+from models import Message, QueryClassification
 
 from presentation.components import chart_options
+from utils.constants import WeatherVarMap
 
 class UIManager:
     def __init__(self) -> None:
@@ -81,3 +83,28 @@ class UIManager:
         for message in self.chat_log:
             ui.chat_message(message.content, name=message.role, stamp=message.stamp, avatar=message.avatar, sent=message.sent)
         ui.run_javascript("{const chatContainer = document.querySelector('.q-tab-panel.nicegui-tab-panel.overflow-auto'); if (chatContainer) {chatContainer.scrollTop = chatContainer.scrollHeight;}}")
+
+    def update_map(self, lat_lng: tuple[float, float]) -> None:
+        self.map.marker(latlng=(lat_lng))
+        self.map.center = (lat_lng)
+
+    def update_chart(self, weather_data: dict[str, list], classification: QueryClassification) -> None:
+        logger.debug(f"weather_data: {weather_data}")
+        self.chart.options['plotOptions']['series']['pointStart'] = weather_data['time_data'][0].timestamp() * 1000
+        self.chart.options['plotOptions']['series']['pointInterval'] = (weather_data['time_data'][1] - weather_data['time_data'][0]).seconds * 1000
+        self.chart.options['series'][0]['data'] = [
+            {'x': point['x'], 'y': point['y'], 
+                'dataLabels': {
+                    'enabled': True, 
+                    'useHTML': True, 
+                    'format': ('<div style="width: 30px; height: 30px; overflow: hidden; border-radius: 50%">' + f'<img src="{point["iconPath"]}"' + 'style="width: 30px"></div>')
+                }} for point in weather_data[WeatherVarMap.temp]]
+        logger.info(f"chart.options['series'][0]['data']: {self.chart.options['series'][0]['data']}")
+        self.chart.options['series'][1]['data'] = weather_data[WeatherVarMap.rain]
+        self.chart.options['series'][2]['data'] = weather_data[WeatherVarMap.humidity]
+        self.chart.options['series'][3]['data'] = weather_data[WeatherVarMap.wind_speed]
+        self.chart.options['series'][4]['data'] = weather_data[WeatherVarMap.cloud_cover]
+        self.chart.options['title']['text'] = f"Weather Forecast for {
+            classification.location.title()} on {classification.query_from_date.strftime('%A, %d %B %Y')}"
+        self.chart.update()
+
