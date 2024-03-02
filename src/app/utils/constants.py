@@ -1,6 +1,4 @@
-from typing import Literal
 from enum import Enum
-from datetime import datetime
 
 ClassificationPrompt = (
     "CURRENT DATE AND TIME: {current_datetime}.\n"
@@ -39,7 +37,7 @@ class QueryPeriodsEnum(Enum):
     EVENING = 'evening'
     NIGHT = 'night'
     WHOLE_DAY = 'whole day'
-    MULTI_DAY = 'multi-day'
+    MULTIPLE_DAYS = 'multi-day'
 
 weather_unit_map = {
     "degreeK": (lambda x: x - 273.15, "C"),
@@ -100,11 +98,11 @@ query_variable_map = {
 
 
 period_hours_map = {
-    QueryPeriodsEnum.MORNING: list(range(6, 11)),  # 5AM to 11AM
-    QueryPeriodsEnum.AFTERNOON: list(range(12, 17)),  # 12PM to 4PM
-    QueryPeriodsEnum.EVENING: list(range(18, 23)),  # 5PM to 8PM
-    QueryPeriodsEnum.NIGHT: list(range(0, 5)),  # 9PM to 4AM
-    QueryPeriodsEnum.WHOLE_DAY: list(range(0, 23)),  # Whole day
+    QueryPeriodsEnum.MORNING: list(range(6, 12)),  # 5AM to 11AM
+    QueryPeriodsEnum.AFTERNOON: list(range(12, 18)),  # 12PM to 4PM
+    QueryPeriodsEnum.EVENING: list(range(18, 24)),  # 5PM to 8PM
+    QueryPeriodsEnum.NIGHT: list(range(0, 6)),  # 9PM to 4AM
+    QueryPeriodsEnum.WHOLE_DAY: list(range(0, 24)),  # Whole day
 }
 
 
@@ -123,4 +121,5 @@ class WeatherIconMap(Enum):
     showers_night = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/rainy-2-night.svg'
     rain_day = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/rainy-3-day.svg'
     rain_night = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/rainy-3-night.svg'
-    wind = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/wind.svg'
+    wind_day = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/wind.svg'
+    wind_night = 'https://cdn.jsdelivr.net/gh/Makin-Things/weather-icons/animated/wind.svg'

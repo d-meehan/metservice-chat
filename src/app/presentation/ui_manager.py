@@ -30,7 +30,7 @@ class UIManager:
     def load_chat_column(self, callback: Callable[[ui.input], Awaitable]) -> None:
         with ui.column().classes('w-1/3 max-w-2xl items-stretch mx-auto h-full max-w-2xl px-4 h-full'):
             with ui.tab_panel(name='chat').classes('w-full h-5/6 px-4 border rounded-lg border-gray-300 max-w-2xl items-stretch overflow-auto flex-column-reverse overflow-anchor-auto'):
-                self.display_messages()
+                self._display_messages()
             with ui.row().classes('w-full h-1/6 no-wrap bottom-5 mx-auto'):
                 placeholder = 'message'
                 text = ui.input(placeholder=placeholder).props('rounded outlined').classes(
@@ -76,13 +76,7 @@ class UIManager:
             sent=sent
             )
         self.chat_log.append(message)
-        self.display_messages.refresh()
-
-    @ui.refreshable
-    def display_messages(self):
-        for message in self.chat_log:
-            ui.chat_message(message.content, name=message.role, stamp=message.stamp, avatar=message.avatar, sent=message.sent)
-        ui.run_javascript("{const chatContainer = document.querySelector('.q-tab-panel.nicegui-tab-panel.overflow-auto'); if (chatContainer) {chatContainer.scrollTop = chatContainer.scrollHeight;}}")
+        self._display_messages.refresh()
 
     def update_map(self, lat_lng: tuple[float, float]) -> None:
         self.map.marker(latlng=(lat_lng))
@@ -108,3 +102,10 @@ class UIManager:
             classification.location.title()} on {classification.query_from_date.strftime('%A, %d %B %Y')}"
         self.chart.update()
 
+    @ui.refreshable
+    def _display_messages(self):
+        for message in self.chat_log:
+            ui.chat_message(message.content, name=message.role,
+                            stamp=message.stamp, avatar=message.avatar, sent=message.sent)
+        ui.run_javascript(
+            "{const chatContainer = document.querySelector('.q-tab-panel.nicegui-tab-panel.overflow-auto'); if (chatContainer) {chatContainer.scrollTop = chatContainer.scrollHeight;}}")

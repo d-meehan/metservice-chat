@@ -1,8 +1,10 @@
 import os
-from datetime import datetime, timedelta, date, time
+from datetime import datetime, timedelta, date
+
 from loguru import logger
 import httpx
 from nicegui import app
+
 from models import MetservicePointTimeRequest, MetserviceTimePointSummary, MetserviceVariable, MetservicePointTimeRequest, MetservicePeriodSummary, QueryClassification
 from service.user_service import UserService
 from utils.constants import QueryTypesEnum, QueryPeriodsEnum, WeatherIconMap, WeatherVarMap, query_variable_map, period_hours_map, weather_unit_map
@@ -13,6 +15,9 @@ class WeatherService:
         self.user_service = user_service
 
     async def get_weather_data(self, classification: QueryClassification) -> None:
+        logger.info(f"request.location: {classification.location}")
+        if classification.location is None:
+            classification.location = await self._get_request_location(classification)
         new_data_dates, new_data_query_types = await self._check_data_store(classification)
         if new_data_dates:
             logger.info("Conditions not met, fetching new weather data.")
@@ -22,7 +27,7 @@ class WeatherService:
 
 
     async def fetch_data(self, classification: QueryClassification) -> list[MetservicePeriodSummary]:
-        if classification.query_period == QueryPeriodsEnum.MULTI_DAY and classification.query_to_date:
+        if classification.query_period == QueryPeriodsEnum.MULTIPLE_DAYS and classification.query_to_date:
             classification_dates = await self._classify_dates(classification)
         else:
             classification_dates = [classification.query_from_date]
@@ -76,6 +81,19 @@ class WeatherService:
         weather_data[WeatherVarMap.temp] = temp_icon_data
 
         return weather_data
+
+    async def _get_request_location(self, classification: QueryClassification) -> str: 
+        if 'location' not in app.storage.user:
+            try:
+                latitude = await self.user_service.user_latitude()
+                longitude = await self.user_service.user_longitude()
+                app.storage.user['location'] = await self._lat_lon_to_location(latitude, longitude)
+                app.storage.user['latitude'] = latitude
+                app.storage.user['longitude'] = longitude
+            except Exception as e:
+                logger.error(f"No location provided in query and user did not respond to request for location: {e}")
+
+        return app.storage.user['location']
 
     async def _categorise_weather(self, prec_mm: float, wind_km_h: float, cloud_pct: float, temp_c: float) -> str:
         try:
@@ -135,7 +153,7 @@ class WeatherService:
             weather_data[WeatherVarMap(variable.name)].append(variable.value)
     
     async def _check_data_store(self, classification: QueryClassification) -> tuple[list[date], set[str]]:
-        if classification.query_period == QueryPeriodsEnum.MULTI_DAY and classification.query_to_date:
+        if classification.query_period == QueryPeriodsEnum.MULTIPLE_DAYS and classification.query_to_date:
             classification_dates = await self._classify_dates(classification)
         else:
             classification_dates = [classification.query_from_date]
@@ -151,6 +169,7 @@ class WeatherService:
                 query_type_present = False
 
                 for stored_data in self.data_store:
+                    logger.debug(f"Stored data location: {stored_data.location}, classification location: {classification.location} stored date: {stored_data.date}, classification date: {classification.query_from_date} stored period_types: {stored_data.period_types}, classification period_types: {classification.query_period}, stored weather_data_types: {stored_data.weather_data_types}, classification data_types: {classification.query_type}")
                     if stored_data.location == classification.location and stored_data.date == date and (stored_data.period_types == classification.query_period or QueryPeriodsEnum.WHOLE_DAY in stored_data.period_types):
                         if query_type in stored_data.weather_data_types or \
                                 (query_type not in [QueryTypesEnum.GENERAL_WEATHER, QueryTypesEnum.SEA_BOAT_SURF_FISHING] and QueryTypesEnum.GENERAL_WEATHER in stored_data.weather_data_types):
@@ -251,7 +270,7 @@ class WeatherService:
         first_date = dates[0]
         last_date = dates[-1]
         from_datetime = datetime(year=first_date.year, month=first_date.month,day=first_date.day,hour=start_time).strftime("%Y-%m-%dT%H:00:00Z")
-        if request.query_period == [QueryPeriodsEnum.MULTI_DAY]:
+        if request.query_period == [QueryPeriodsEnum.MULTIPLE_DAYS]:
             days = (last_date-first_date).days
             repeat = days * 4 - 1
             interval = "6h"
@@ -265,24 +284,7 @@ class WeatherService:
         variables = []
         for query_type in query_types:
             variables.extend(query_variable_map[query_type])
-
-        logger.info(f"request.location: {request.location}")
-        if request.location is None:
-            if 'location' not in app.storage.user:
-                try:
-                    latitude = await self.user_service.user_latitude()
-                    longitude = await self.user_service.user_longitude()
-                    app.storage.user['location'] = await self._lat_lon_to_location(latitude, longitude)
-                    app.storage.user['latitude'] = latitude
-                    app.storage.user['longitude'] = longitude
-                except Exception as e:
-                    logger.error(f"No location provided in query and user did not respond to request for location: {e}")
-            else:
-                latitude = app.storage.user['latitude']
-                longitude = app.storage.user['longitude']
-            request.location = app.storage.user['location']
-        else:
-            latitude, longitude = await self._location_to_lat_lon(request.location)
+        latitude, longitude = await self._location_to_lat_lon(request.location)
 
         metservice_request = MetservicePointTimeRequest(
             latitude=latitude,

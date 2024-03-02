@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from typing import TypeVar
+
 from pydantic import BaseModel
 from loguru import logger
 from nicegui import app
@@ -8,7 +9,8 @@ import instructor
 import googlemaps
 from dotenv import load_dotenv
 import openai
-from models import ModelResponseToWeatherQuery, Message, QueryClassification
+
+from models import QueryClassification
 from utils.constants import ClassificationPrompt, QueryResponsePrompt
 from presentation.ui_manager import UIManager
 from service.weather_service import WeatherService

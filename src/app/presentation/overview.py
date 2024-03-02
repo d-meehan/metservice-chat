@@ -1,8 +1,8 @@
 from nicegui import ui
 from loguru import logger
+
 from service.chat_service import ChatService
 from models import MetservicePeriodSummary, QueryClassification
-from presentation.components import configure_page_layout
 from utils.constants import QueryTypesEnum
 
 
@@ -32,7 +32,7 @@ def load_interface(chat_service: ChatService) -> None:
                 logger.debug(f"Weather data with icons: {weather_data}")
             chat_service.ui_manager.update_chart(weather_data, classification)
 
-        configure_page_layout()
+        chat_service.ui_manager.load_ui()
         with ui.row().classes('h-full w-full no-wrap items-stretch max-h-screen'):
             chat_service.ui_manager.load_chat_column(callback=chat_callback)
             chat_service.ui_manager.load_data_visualization()

@@ -1,6 +1,8 @@
 from typing import Optional
 from datetime import date, time
+
 from pydantic import BaseModel, Field, ConfigDict
+
 from utils.constants import QueryPeriodsEnum, QueryTypesEnum
 
 class QueryClassification(BaseModel):
