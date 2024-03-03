@@ -10,9 +10,9 @@ from service.user_service import UserService
 def main():
     logger.info("Starting WeatherBot")
     user_service = UserService()
-    weather_service = WeatherService(user_service)
+    weather_service = WeatherService()
     ui_manager = UIManager()
-    chat_service = ChatService(weather_service, ui_manager)
+    chat_service = ChatService(weather_service=weather_service, ui_manager=ui_manager, user_service=user_service)
     load_interface(chat_service)
     ui.run(title="WeatherBot", storage_secret="secret-key")
 

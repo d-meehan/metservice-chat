@@ -84,7 +84,7 @@ query_variable_map = {
         WeatherVarMap.wind_speed,
     ],
     QueryTypesEnum.SEA_BOAT_SURF_FISHING: [
-        WeatherVarMap.sea_temperature,
+        WeatherVarMap.temp,
         WeatherVarMap.wave_height,
         WeatherVarMap.wave_height_max,
         WeatherVarMap.wave_direction_mean,
@@ -98,11 +98,12 @@ query_variable_map = {
 
 
 period_hours_map = {
-    QueryPeriodsEnum.MORNING: list(range(6, 12)),  # 5AM to 11AM
-    QueryPeriodsEnum.AFTERNOON: list(range(12, 18)),  # 12PM to 4PM
-    QueryPeriodsEnum.EVENING: list(range(18, 24)),  # 5PM to 8PM
-    QueryPeriodsEnum.NIGHT: list(range(0, 6)),  # 9PM to 4AM
+    QueryPeriodsEnum.MORNING: list(range(6, 12)),  # 6AM to 11AM
+    QueryPeriodsEnum.AFTERNOON: list(range(12, 18)),  # 12PM to 5PM
+    QueryPeriodsEnum.EVENING: list(range(18, 24)),  # 6PM to 11PM
+    QueryPeriodsEnum.NIGHT: list(range(0, 6)),  # 12AM to 4AM
     QueryPeriodsEnum.WHOLE_DAY: list(range(0, 24)),  # Whole day
+    QueryPeriodsEnum.MULTIPLE_DAYS: list(range(0, 24)),  # Multiple days
 }
 
 

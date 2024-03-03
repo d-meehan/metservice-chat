@@ -30,9 +30,8 @@ poetry shell
 4. Set the environment variables
 
 Create a .env file in the root with:
-METSERVICE_KEY
+METSERVICE_API_KEY
 OPENAI_API_KEY
-GOOGLE_MAPS_API_KEY
 
 5. Run the application
 

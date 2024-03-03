@@ -1,12 +1,15 @@
 from collections.abc import Awaitable, Callable
+import os
 from datetime import datetime
-from loguru import logger
 
+from loguru import logger
+from dotenv import load_dotenv
 from nicegui import ui
 from models import Message, QueryClassification
 
 from presentation.components import chart_options
-from utils.constants import WeatherVarMap
+from utils.constants import QueryTypesEnum, WeatherVarMap
+
 
 class UIManager:
     def __init__(self) -> None:
@@ -28,19 +31,31 @@ class UIManager:
         self.send_button.set_visibility(not show_spinner)
 
     def load_chat_column(self, callback: Callable[[ui.input], Awaitable]) -> None:
+        load_dotenv()
+
+        OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', None)
+        METSERVICE_API_KEY = os.environ.get('METSERVICE_API_KEY', None)
         with ui.column().classes('w-1/3 max-w-2xl items-stretch mx-auto h-full max-w-2xl px-4 h-full'):
             with ui.tab_panel(name='chat').classes('w-full h-5/6 px-4 border rounded-lg border-gray-300 max-w-2xl items-stretch overflow-auto flex-column-reverse overflow-anchor-auto'):
                 self._display_messages()
             with ui.row().classes('w-full h-1/6 no-wrap bottom-5 mx-auto'):
-                placeholder = 'message'
-                text = ui.input(placeholder=placeholder).props('rounded outlined').classes(
-                    'w-full self-center').on('keydown.enter', lambda e: callback(text)).on(
+                logger.debug(f"OPENAI_API_KEY: {OPENAI_API_KEY}", f"METSERVICE_API_KEY: {METSERVICE_API_KEY}")
+                if OPENAI_API_KEY and METSERVICE_API_KEY:
+                    placeholder = 'Message WeatherBot'
+                    text = ui.input(placeholder=placeholder).props('rounded outlined').classes(
+                        'w-full self-center').on('keydown.enter', lambda e: callback(text)).on(
                         'keydown.enter', lambda e: text.set_value(None))
-                with text:
-                    self.send_button = ui.button(icon='send').on('click', lambda e: callback(text)).props(
-                        'round dense flat').on('click', lambda e: text.set_value(None))
-                    self.spinner = ui.spinner(size='3em').classes('right-0 self-center')
-                    self.spinner.set_visibility(False)
+                    with text:
+                        self.send_button = ui.button(icon='send').on('click', lambda e: callback(text)).props(
+                            'round dense flat').on('click', lambda e: text.set_value(None))
+                        self.spinner = ui.spinner(size='3em').classes('right-0 self-center')
+                        self.spinner.set_visibility(False)
+                else:
+                    text = ui.input(placeholder='Please set API keys in .env file in project root.').props(
+                        'rounded outlined').classes('w-full self-center')
+                    with text:
+                        self.send_button = ui.button('send').props('round dense flat').disable()
+                        self.spinner = ui.spinner(size='3em').classes('right-0 self-center').set_visibility(False)
             ui.markdown('WeatherBot').classes(
                 'absolute bottom-4 text-xs mr-7 text-primary')
             
@@ -61,7 +76,7 @@ class UIManager:
                                     'windbarb', 'accessibility']).classes(
                                         'w-full h-full')
 
-    def add_message(self, role: str, content: str):
+    async def add_message(self, role: str, content: str):
         if role == "user":
             avatar = "https://www.gravatar.com/avatar/"
             sent = True
@@ -86,18 +101,21 @@ class UIManager:
         logger.debug(f"weather_data: {weather_data}")
         self.chart.options['plotOptions']['series']['pointStart'] = weather_data['time_data'][0].timestamp() * 1000
         self.chart.options['plotOptions']['series']['pointInterval'] = (weather_data['time_data'][1] - weather_data['time_data'][0]).seconds * 1000
-        self.chart.options['series'][0]['data'] = [
-            {'x': point['x'], 'y': point['y'], 
-                'dataLabels': {
-                    'enabled': True, 
-                    'useHTML': True, 
-                    'format': ('<div style="width: 30px; height: 30px; overflow: hidden; border-radius: 50%">' + f'<img src="{point["iconPath"]}"' + 'style="width: 30px"></div>')
-                }} for point in weather_data[WeatherVarMap.temp]]
+        if QueryTypesEnum.GENERAL_WEATHER in classification.query_type:
+            self.chart.options['series'][0]['data'] = [
+                {'x': point['x'], 'y': point['y'], 
+                    'dataLabels': {
+                        'enabled': True, 
+                        'useHTML': True, 
+                        'format': ('<div style="width: 30px; height: 30px; overflow: hidden; border-radius: 50%">' + f'<img src="{point["iconPath"]}"' + 'style="width: 30px"></div>')
+                    }} for point in weather_data.get(WeatherVarMap.temp, [])]
+        else:
+            self.chart.options['series'][0]['data'] = weather_data.get(WeatherVarMap.temp, [])
         logger.info(f"chart.options['series'][0]['data']: {self.chart.options['series'][0]['data']}")
-        self.chart.options['series'][1]['data'] = weather_data[WeatherVarMap.rain]
-        self.chart.options['series'][2]['data'] = weather_data[WeatherVarMap.humidity]
-        self.chart.options['series'][3]['data'] = weather_data[WeatherVarMap.wind_speed]
-        self.chart.options['series'][4]['data'] = weather_data[WeatherVarMap.cloud_cover]
+        self.chart.options['series'][1]['data'] = weather_data.get(WeatherVarMap.rain, [])
+        self.chart.options['series'][2]['data'] = weather_data.get(WeatherVarMap.humidity, [])
+        self.chart.options['series'][3]['data'] = weather_data.get(WeatherVarMap.wind_speed, [])
+        self.chart.options['series'][4]['data'] = weather_data.get(WeatherVarMap.cloud_cover, [])
         self.chart.options['title']['text'] = f"Weather Forecast for {
             classification.location.title()} on {classification.query_from_date.strftime('%A, %d %B %Y')}"
         self.chart.update()

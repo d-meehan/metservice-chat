@@ -3,31 +3,34 @@ from datetime import datetime, timedelta, date
 
 from loguru import logger
 import httpx
-from nicegui import app
+from geopy.geocoders import Nominatim
+from geopy.location import Location
+from geopy.adapters import AioHTTPAdapter
 
 from models import MetservicePointTimeRequest, MetserviceTimePointSummary, MetserviceVariable, MetservicePointTimeRequest, MetservicePeriodSummary, QueryClassification
-from service.user_service import UserService
 from utils.constants import QueryTypesEnum, QueryPeriodsEnum, WeatherIconMap, WeatherVarMap, query_variable_map, period_hours_map, weather_unit_map
 
-class WeatherService:
-    def __init__(self, user_service: UserService) -> None:
-        self.data_store: list[MetservicePeriodSummary] = []
-        self.user_service = user_service
 
-    async def get_weather_data(self, classification: QueryClassification) -> None:
+class WeatherService:
+    def __init__(self) -> None:
+        self.data_store: list[MetservicePeriodSummary] = []
+        self.geolocator = Nominatim(user_agent="weatherbot", adapter_factory=AioHTTPAdapter)
+
+    async def get_weather_data(self, classification: QueryClassification) -> list[MetservicePeriodSummary]:
         logger.info(f"request.location: {classification.location}")
-        if classification.location is None:
-            classification.location = await self._get_request_location(classification)
         new_data_dates, new_data_query_types = await self._check_data_store(classification)
         if new_data_dates:
             logger.info("Conditions not met, fetching new weather data.")
             metservice_request = await self._create_API_request(request=classification, dates=new_data_dates, query_types=new_data_query_types)
             metservice_response = await self._metservice_api_call(metservice_request)
             await self._store_weather_data(metservice_response, classification)
+        
+        return metservice_response
 
 
-    async def fetch_data(self, classification: QueryClassification) -> list[MetservicePeriodSummary]:
-        if classification.query_period == QueryPeriodsEnum.MULTIPLE_DAYS and classification.query_to_date:
+    async def fetch_data(self, classification: QueryClassification) -> dict[str, list]:
+        logger.debug(f" classification.query_period: {classification.query_period}, classification.query_to_date: {classification.query_to_date}, QueryPeriodsEnum.MULTIPLE_DAYS: {QueryPeriodsEnum.MULTIPLE_DAYS}")
+        if QueryPeriodsEnum.MULTIPLE_DAYS in classification.query_period and classification.query_to_date:
             classification_dates = await self._classify_dates(classification)
         else:
             classification_dates = [classification.query_from_date]
@@ -82,19 +85,6 @@ class WeatherService:
 
         return weather_data
 
-    async def _get_request_location(self, classification: QueryClassification) -> str: 
-        if 'location' not in app.storage.user:
-            try:
-                latitude = await self.user_service.user_latitude()
-                longitude = await self.user_service.user_longitude()
-                app.storage.user['location'] = await self._lat_lon_to_location(latitude, longitude)
-                app.storage.user['latitude'] = latitude
-                app.storage.user['longitude'] = longitude
-            except Exception as e:
-                logger.error(f"No location provided in query and user did not respond to request for location: {e}")
-
-        return app.storage.user['location']
-
     async def _categorise_weather(self, prec_mm: float, wind_km_h: float, cloud_pct: float, temp_c: float) -> str:
         try:
             if temp_c < 0 and 0 <= prec_mm <= 0.2 and wind_km_h < 40:
@@ -132,7 +122,7 @@ class WeatherService:
                 return True
         return False
 
-    async def _initialise_weather_data(self, classification: QueryClassification) -> list[MetservicePeriodSummary]:
+    async def _initialise_weather_data(self, classification: QueryClassification) -> dict[str, list]:
         """
         Initialize the weather data dictionary with lists based on the query_variable_map
         and the current classification.query_types.
@@ -144,7 +134,7 @@ class WeatherService:
                     weather_data[variable] = []
         return weather_data
     
-    async def _update_weather_data(self, weather_data: dict[str, list], variable: MetserviceVariable):
+    async def _update_weather_data(self, weather_data: dict[str, list], variable: MetserviceVariable) -> None:
         """
         Update the weather data dictionary with the variable value.
         """
@@ -153,7 +143,8 @@ class WeatherService:
             weather_data[WeatherVarMap(variable.name)].append(variable.value)
     
     async def _check_data_store(self, classification: QueryClassification) -> tuple[list[date], set[str]]:
-        if classification.query_period == QueryPeriodsEnum.MULTIPLE_DAYS and classification.query_to_date:
+        logger.debug(f" classification.query_period: {classification.query_period}, classification.query_to_date: {classification.query_to_date}, QueryPeriodsEnum.MULTIPLE_DAYS: {QueryPeriodsEnum.MULTIPLE_DAYS}")
+        if QueryPeriodsEnum.MULTIPLE_DAYS in classification.query_period and classification.query_to_date:
             classification_dates = await self._classify_dates(classification)
         else:
             classification_dates = [classification.query_from_date]
@@ -193,6 +184,7 @@ class WeatherService:
         delta = classification.query_to_date - classification.query_from_date
         classification_dates = [classification.query_from_date +
                                 timedelta(days=i) for i in range(delta.days + 1)]
+        logger.debug(f"delta: {delta}, delta days:{delta.days} classification_dates: {classification_dates}")
         return classification_dates
 
     async def _store_weather_data(self, metservice_response: list[MetservicePeriodSummary], classification: QueryClassification) -> None:
@@ -253,9 +245,10 @@ class WeatherService:
                                             data.date}, location: {data.location} and period(s): {data.period_types}.")
                                 stored_data.weather_data_types = list(
                                     set(data.weather_data_types + stored_data.weather_data_types))
-                                # Assuming you want to combine these as well
-                                stored_data.hour_summaries = list(
-                                    set(data.hour_summaries + stored_data.hour_summaries))
+                                for new_hour_summary, stored_hour_summary in zip(data.hour_summaries, stored_data.hour_summaries):
+                                    for variable in new_hour_summary.variables:
+                                        if variable.name not in [var.name for var in stored_hour_summary.variables]:
+                                            stored_hour_summary.variables.append(variable)
                                 data_matched = True
                                 break
             logger.debug(f"Data matched: {data_matched}")
@@ -269,9 +262,10 @@ class WeatherService:
         start_time = min(min(time) for period, time in period_hours_map.items() if period in request.query_period)
         first_date = dates[0]
         last_date = dates[-1]
+        logger.debug(f"Start time: {start_time}, first date: {first_date}, last date: {last_date}, dates: {dates}")
         from_datetime = datetime(year=first_date.year, month=first_date.month,day=first_date.day,hour=start_time).strftime("%Y-%m-%dT%H:00:00Z")
         if request.query_period == [QueryPeriodsEnum.MULTIPLE_DAYS]:
-            days = (last_date-first_date).days
+            days = (last_date-first_date).days + 1
             repeat = days * 4 - 1
             interval = "6h"
         elif request.query_period == [QueryPeriodsEnum.WHOLE_DAY]:
@@ -297,48 +291,29 @@ class WeatherService:
 
         return metservice_request
 
-    @staticmethod
-    async def _location_to_lat_lon(location: str) -> tuple[float, float]:
+    async def _location_to_lat_lon(self, location: str) -> tuple[float, float]:
         logger.info(f"Location: {location}")
         
-        async with httpx.AsyncClient() as request_client:
-            geocode_response = await request_client.get(
-                "https://maps.googleapis.com/maps/api/geocode/json",
-                params={
-                    "address": location,
-                    "key": os.environ["GOOGLE_MAPS_API_KEY"]
-                }
-            )
-
-        if geocode_response.status_code != 200:
-            raise ValueError(
-                f"Request failed with status code {geocode_response.status_code}"
-            )
-        geocode_response = geocode_response.json()
-        latitude=geocode_response['results'][0]['geometry']['location']['lat']
-        longitude=geocode_response['results'][0]['geometry']['location']['lng']
+        geocode_response: Location = await self.geolocator.geocode(location, featuretype=["country", "state", "city", "settlement"])
+        latitude=geocode_response.latitude
+        longitude=geocode_response.longitude
 
         return latitude, longitude
 
     
-    @staticmethod
-    async def _lat_lon_to_location(latitude: float, longitude: float) -> str:
-        async with httpx.AsyncClient() as request_client:
-            geocode_response = await request_client.get(
-                "https://maps.googleapis.com/maps/api/geocode/json",
-                params={
-                    "latlng": f"{latitude},{longitude}",
-                    "key": os.environ["GOOGLE_MAPS_API_KEY"],
-                    "result_type": "political"
-                }
-            )
+    async def _lat_lon_to_location(self, latitude: float, longitude: float) -> str:
 
-        if geocode_response.status_code != 200:
-            raise ValueError(
-                f"Request failed with status code {geocode_response.status_code}"
-            )
-        geocode_response = geocode_response.json()
-        location = geocode_response['results'][0]['formatted_address']
+        response: Location = await self.geolocator.reverse((latitude, longitude), zoom=12)
+        logger.debug(f"Response raw: {response.raw}, response: {response}")
+        location = response.raw['name']
+        logger.debug(f"Location: {location}")
+
+        # if geocode_response.status_code != 200:
+        #     raise ValueError(
+        #         f"Request failed with status code {geocode_response.status_code}"
+        #     )
+        # geocode_response = geocode_response.json()
+        # location = geocode_response['results'][0]['formatted_address']
 
         return location
 
@@ -347,7 +322,7 @@ class WeatherService:
         async with httpx.AsyncClient() as request_client:
             response = await request_client.post(
                 "https://forecast-v2.metoceanapi.com/point/time",
-                headers={"x-api-key": os.environ["METSERVICE_KEY"]},
+                headers={"x-api-key": os.environ["METSERVICE_API_KEY"]},
                 json={
                     "points": [{
                         "lon": request.longitude,
@@ -409,8 +384,12 @@ class WeatherService:
                         # Apply transformations based on units
                         if var_units in weather_unit_map:
                             transform_func, var_units = weather_unit_map[var_units]
-                            var_value = transform_func(var_value)
-                        var_value = round(var_value, 2)
+                            if var_value is not None:
+                                var_value = transform_func(var_value)
+                        if var_value is not None:
+                            var_value = round(var_value, 2)
+                        else:
+                            var_value = 0.0
                         variables.append(MetserviceVariable(name=var_name, value=var_value, units=var_units))
 
                     hour_summaries.append(MetserviceTimePointSummary(hour=hour, variables=variables))

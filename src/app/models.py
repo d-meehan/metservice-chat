@@ -11,13 +11,12 @@ class QueryClassification(BaseModel):
         description='What type of query has the user sent?')
     location: Optional[str] = Field(None, title='Location',
         description='The location the user is asking about.')
-    query_from_date: date = Field(..., title='Start Time',
+    query_from_date: date = Field(..., title='First Date',
         description='The first day to request data for, formatted as :%Y-%m-%d')
-    query_to_date: Optional[date] = Field(None, title='End Time',
-        description='The last day to request data for, formatted as :%Y-%m-%d. Only required if the query_period is multi-day')
+    query_to_date: date = Field(..., title='Last Date',
+        description='The last day to request data for, formatted as :%Y-%m-%d. Unless query_period is "multi-day", this should be the same as query_from_date.')
     query_period: list[QueryPeriodsEnum] = Field(..., title='Query period',
-        description='The period of time the user is asking about. If they are ask for specific times select a period that includes that time: morning=6-11.59, afternoon=12-17.59, evening=18-23.59, night=0-5.59.')
-
+        description='The period of time the user is asking about. If they are ask for specific times select a period that includes that time: morning=6-11.59, afternoon=12-17.59, evening=18-23.59, night=0-5.59. If they are asking for multiple days or a week, select "multiple_days".')
 class ModelResponseToWeatherQuery(QueryClassification):
     """Request model for weather queries."""
     response: str = Field(..., title='Response',

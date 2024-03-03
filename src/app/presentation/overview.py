@@ -5,7 +5,6 @@ from service.chat_service import ChatService
 from models import MetservicePeriodSummary, QueryClassification
 from utils.constants import QueryTypesEnum
 
-
 def load_interface(chat_service: ChatService) -> None:
     @ui.page('/')
     async def chat_page():
@@ -16,15 +15,18 @@ def load_interface(chat_service: ChatService) -> None:
                 await chat_service.process_message()
                 return
             logger.info("Query type is weather related")
-            await chat_service.weather_service.get_weather_data(classification)
+            metservice_response = await chat_service.weather_service.get_weather_data(classification)
             await chat_service.process_message()
 
-            lat_lng = await chat_service.weather_service._location_to_lat_lon(classification.location)
-            logger.info(f"lat_lng: {lat_lng}")
-            chat_service.ui_manager.update_map(lat_lng)
+            latitude = metservice_response[0].latitude
+            longitude = metservice_response[0].longitude
+            chat_service.ui_manager.update_map((latitude, longitude))
             logger.info(f"Map shown for location: {classification.location}")
 
-            weather_data: list[MetservicePeriodSummary] = await chat_service.weather_service.fetch_data(classification)
+            # lat_lng = await chat_service.weather_service._location_to_lat_lon(classification.location)
+            # logger.info(f"lat_lng: {lat_lng}")
+            weather_data = await chat_service.weather_service.fetch_data(classification)
+
             logger.debug(f"Weather data: {weather_data}")
             if QueryTypesEnum.GENERAL_WEATHER in classification.query_type:
                 logger.info(f"Query types: {classification.query_type} includes: {QueryTypesEnum.GENERAL_WEATHER}")

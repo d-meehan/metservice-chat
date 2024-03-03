@@ -6,7 +6,6 @@ from pydantic import BaseModel
 from loguru import logger
 from nicegui import app
 import instructor
-import googlemaps
 from dotenv import load_dotenv
 import openai
 
@@ -14,35 +13,40 @@ from models import QueryClassification
 from utils.constants import ClassificationPrompt, QueryResponsePrompt
 from presentation.ui_manager import UIManager
 from service.weather_service import WeatherService
+from service.user_service import UserService
 
 load_dotenv()
 
 pydantic_client = instructor.apatch(openai.AsyncOpenAI(api_key=os.environ['OPENAI_API_KEY']))
 client = openai.AsyncOpenAI(api_key=os.environ['OPENAI_API_KEY'])
-gmaps = googlemaps.Client(key=os.environ['GOOGLE_MAPS_API_KEY'])
 
 ResponseModel = TypeVar("ResponseModel", bound=BaseModel)
 
 class ChatService:
-    def __init__(self, weather_service: WeatherService, ui_manager: UIManager) -> None:
+    def __init__(self, weather_service: WeatherService, ui_manager: UIManager, user_service: UserService) -> None:
         self.weather_service = weather_service
         self.ui_manager = ui_manager
+        self.user_service = user_service
 
     async def classify_query(self, query: str) -> QueryClassification:
         self.ui_manager.toggle_visual_processing(show_spinner=True)
-        self.ui_manager.add_message(
+        await self.ui_manager.add_message(
                 role="user",
                 content=query,
                 )
         classification: QueryClassification = await self._classify_query(response_model=QueryClassification)
-        if classification.location == []:
+        if classification.location == None:
             if 'location' not in app.storage.user:
                 try:
-                    latitude = await self.weather_service.user_service.user_latitude()
-                    longitude = await self.weather_service.user_service.user_longitude()
+                    latitude = await self.user_service.user_latitude()
+                    longitude = await self.user_service.user_longitude()
+                    logger.info(f"User location: {latitude}, {longitude}")
                     app.storage.user['latitude'] = latitude
                     app.storage.user['longitude'] = longitude
-                    app.storage.user['location'] = await self.weather_service._lat_lon_to_location(latitude, longitude)
+
+                    location = await self.weather_service._lat_lon_to_location(latitude, longitude)
+                    logger.debug(f"Location: {location}")
+                    app.storage.user['location'] = location
                 except Exception as e:
                     logger.error(
                         f"No location provided in query and user did not respond to request for location: {e}")
@@ -52,7 +56,7 @@ class ChatService:
 
     async def process_message(self) -> None:
         response = await self._answer_query()
-        self.ui_manager.add_message(
+        await self.ui_manager.add_message(
                 role="WeatherBot",
                 content=response,
                 )
