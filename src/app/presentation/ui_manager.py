@@ -25,7 +25,7 @@ class UIManager:
         ui.query('.q-page').classes('flex')
         ui.query('.nicegui-content').classes('w-full')
 
-    def toggle_visual_processing(self, show_spinner: bool):
+    async def toggle_visual_processing(self, show_spinner: bool):
         """Toggles visibility of the UI elements based on the user interaction."""
         self.spinner.set_visibility(show_spinner)
         self.send_button.set_visibility(not show_spinner)
@@ -39,7 +39,6 @@ class UIManager:
             with ui.tab_panel(name='chat').classes('w-full h-5/6 px-4 border rounded-lg border-gray-300 max-w-2xl items-stretch overflow-auto flex-column-reverse overflow-anchor-auto'):
                 self._display_messages()
             with ui.row().classes('w-full h-1/6 no-wrap bottom-5 mx-auto'):
-                logger.debug(f"OPENAI_API_KEY: {OPENAI_API_KEY}", f"METSERVICE_API_KEY: {METSERVICE_API_KEY}")
                 if OPENAI_API_KEY and METSERVICE_API_KEY:
                     placeholder = 'Message WeatherBot'
                     text = ui.input(placeholder=placeholder).props('rounded outlined').classes(
@@ -98,7 +97,6 @@ class UIManager:
         self.map.center = (lat_lng)
 
     def update_chart(self, weather_data: dict[str, list], classification: QueryClassification) -> None:
-        logger.debug(f"weather_data: {weather_data}")
         self.chart.options['plotOptions']['series']['pointStart'] = weather_data['time_data'][0].timestamp() * 1000
         self.chart.options['plotOptions']['series']['pointInterval'] = (weather_data['time_data'][1] - weather_data['time_data'][0]).seconds * 1000
         if QueryTypesEnum.GENERAL_WEATHER in classification.query_type:

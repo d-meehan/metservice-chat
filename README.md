@@ -2,7 +2,7 @@
 A chatbot interface integrated with Metservice API to allow a user to interact with weather data through natural language
 
 ## Pre-requisites
-- Python 3.12 or higher
+- Python 3.10 or higher
 - Poetry
 
 ## Installation
@@ -15,8 +15,8 @@ git clone git@github.com:d-meehan/metservice-chat.git
 2. Create a virtual environment and install dependencies
 
 ```zsh
-pyenv install 3.12
-pyenv local 3.12
+pyenv install 3.10
+pyenv local 3.10
 poetry config virtualenvs.in-project true
 poetry install
 ```
@@ -33,8 +33,14 @@ Create a .env file in the root with:
 METSERVICE_API_KEY
 OPENAI_API_KEY
 
-5. Run the application
+5. Add src to the PYTHONPATH
 
 ```zsh
-python -m src.app.presentation.overview
+export PYTHONPATH="${PYTHONPATH}:/src"
+```
+
+6. Run the application
+
+```zsh
+python3 src/app/main.py
 ```

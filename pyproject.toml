@@ -7,18 +7,14 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
-requests = "^2.31.0"
-fastapi = "^0.109.2"
+python = "^3.10"
 pydantic = "^2.6.1"
 loguru = "^0.7.2"
-pathlib = "^1.0.1"
 geopy = "^2.4.1"
 instructor = "^0.5.0"
 nicegui = "^1.4.14"
 asyncio = "^3.4.3"
 httpx = "^0.26.0"
-ipykernel = "^6.29.2"
 nicegui-highcharts = "^1.0.1"
 
 
