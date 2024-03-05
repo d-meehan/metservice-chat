@@ -16,6 +16,7 @@ nicegui = "^1.4.14"
 asyncio = "^3.4.3"
 httpx = "^0.26.0"
 nicegui-highcharts = "^1.0.1"
+starlette = "0.36.3"
 
 
 [tool.poetry.group.lint.dependencies]
