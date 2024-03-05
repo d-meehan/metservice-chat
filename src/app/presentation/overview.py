@@ -5,7 +5,6 @@ from nicegui import ui, app
 from loguru import logger
 
 from service.chat_service import ChatService
-from presentation.components import login_page
 from models import QueryClassification
 from utils.constants import QueryTypesEnum
 from utils.auth import AuthMiddleware
