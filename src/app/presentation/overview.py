@@ -17,14 +17,17 @@ def load_interface(chat_service: ChatService) -> None:
     @ui.page('/login')
     def login_page() -> Optional[RedirectResponse]:
         def try_login() -> None:  # local function to avoid passing username and password as arguments
+            logger.info(f"{app.storage.user.get('referrer_path', '/')}")
             if password.value == os.environ.get('PASSWORD'):
                 app.storage.user.update({'authenticated': True})
+                logger.info(f"User authenticated: {app.storage.user.get('authenticated', False)}")
                 # go back to where the user wanted to go
                 ui.navigate.to(app.storage.user.get('referrer_path', '/'))
             else:
                 ui.notify('Wrong password', color='negative')
 
         if app.storage.user.get('authenticated', False):
+            logger.info(f"User authenticated: {app.storage.user.get('authenticated', False)}, redirecting to /chat")
             return RedirectResponse('/chat')
         with ui.card().classes('absolute-center'):
             password = ui.input('Password', password=True, password_toggle_button=True).on(
@@ -34,6 +37,7 @@ def load_interface(chat_service: ChatService) -> None:
     
     @ui.page('/chat')
     async def chat_page() -> None:
+        logger.info(f"loading chat page for user: {app.storage.user.get('authenticated', False)}")
         async def chat_callback(e: ui.input) -> None:
             classification: QueryClassification = await chat_service.classify_query(query=e.value)
             if QueryTypesEnum.NON_WEATHER in classification.query_type:

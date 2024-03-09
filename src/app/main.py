@@ -10,7 +10,7 @@ from service.weather_service import WeatherService
 from service.user_service import UserService
 
 def main():
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.environ.get('PORT', 80))
     logger.info("Starting WeatherBot")
     user_service = UserService()
     weather_service = WeatherService()
