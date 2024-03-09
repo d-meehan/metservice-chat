@@ -10,7 +10,6 @@ from utils.constants import QueryTypesEnum
 from utils.auth import AuthMiddleware
 
 
-@ui.page('/')
 def load_interface(chat_service: ChatService) -> None:
     app.add_middleware(AuthMiddleware)
 
