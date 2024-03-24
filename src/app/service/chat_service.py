@@ -49,7 +49,7 @@ class ChatService:
                 content=query,
                 )
         classification: QueryClassification = await self._model_query_classification(response_model=QueryClassification)
-        if classification.location == None:
+        if classification.location == None and classification.query_type != "non-weather":
             while 'location' not in app.storage.user or app.storage.user['location'] in [None, "null"]:
                 try:
                     latitude = await self.user_service.user_latitude()
