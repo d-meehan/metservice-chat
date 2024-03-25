@@ -1,6 +1,6 @@
 
 
-# Basic Highchart configuration for weather visualization
+
 chart_options = {
     'time': {'useUTC': False},
     'title': {'text': 'Weather Forecast', 'align': 'left',

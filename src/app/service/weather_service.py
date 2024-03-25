@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta, date
+from zoneinfo import ZoneInfo
 
 from loguru import logger
 import httpx
@@ -43,7 +44,7 @@ class WeatherService:
             
             for hour_summary in data.hour_summaries:
                 if await self._matches_query_period(hour_summary=hour_summary, query_periods=classification.query_period):
-                    weather_data['time_data'].append(datetime.combine(data.date, hour_summary.hour))  
+                    weather_data['time_data'].append(datetime.combine(data.date, hour_summary.hour, tzinfo=ZoneInfo('Pacific/Auckland')))
                     for variable in hour_summary.variables:
                         await self._update_weather_data(weather_data=weather_data, variable=variable)
         return weather_data
@@ -56,20 +57,17 @@ class WeatherService:
         temp_icon_data = []
 
         for idx, time in enumerate(weather_data['time_data']):
-            # Extract weather variables for this time point by index
             prec_mm = weather_data.get(WeatherVarMap.rain, [None])[idx]
             wind_km_h = weather_data.get(WeatherVarMap.wind_speed, [None])[idx]
             cloud_pct = weather_data.get(WeatherVarMap.cloud_cover, [None])[idx]
             temp_c = weather_data.get(WeatherVarMap.temp, [None])[idx]
 
-            # Handle missing data gracefully
             if None in (prec_mm, wind_km_h, cloud_pct, temp_c):
                 logger.warning(f"Missing weather data at index {idx}; skipping classification.")
                 continue
 
             weather_category = await self._categorise_weather(prec_mm=prec_mm, wind_km_h=wind_km_h, cloud_pct=cloud_pct, temp_c=temp_c)
 
-            # Adjust classification for day or night
             if time.time() <= datetime.strptime('06:00:00', '%H:%M:%S').time() or time.time() > datetime.strptime('18:00:00', '%H:%M:%S').time():
                 weather_category += '_night'
             else:
@@ -360,6 +358,8 @@ class WeatherService:
                                 var_value = transform_func(var_value)
                         if var_value is not None:
                             var_value = round(var_value, 2)
+                            if var_value < 0:
+                                var_value = 0.0
                         else:
                             var_value = 0.0
                         variables.append(MetserviceVariable(name=var_name, value=var_value, units=var_units))

@@ -16,6 +16,10 @@ from utils.auth import AuthMiddleware
 def load_interface() -> None:
     app.add_middleware(AuthMiddleware)
 
+    @ui.page('/')
+    def home_page() -> RedirectResponse:
+        return RedirectResponse('/chat')
+
     @ui.page('/login')
     def login_page() -> Optional[RedirectResponse]:
         def try_login() -> None: 
@@ -35,7 +39,7 @@ def load_interface() -> None:
             ui.button('Log in', on_click=try_login)
         return None
     
-    @ui.page('/')
+    @ui.page('/chat')
     async def chat_page() -> None:
         user_service = UserService()
         weather_service = WeatherService()
@@ -46,10 +50,12 @@ def load_interface() -> None:
         
         async def chat_callback(e: ui.input) -> None:
             classification: QueryClassification = await chat_service.classify_query(query=e.value)
+
             if QueryTypesEnum.NON_WEATHER in classification.query_type:
                 logger.info("Query type is not weather related")
                 await chat_service.process_message()
                 return
+            
             logger.info("Query type is weather related")
             metservice_response = await chat_service.weather_service.get_weather_data(classification)
             await chat_service.process_message()
@@ -60,8 +66,10 @@ def load_interface() -> None:
             logger.info(f"Map shown for location: {classification.location}")
 
             weather_data = await chat_service.weather_service.fetch_data(classification)
+
             if QueryTypesEnum.GENERAL_WEATHER in classification.query_type:
                 weather_data = await chat_service.weather_service.fetch_weather_icons(weather_data)
+                
             chat_service.ui_manager.update_chart(weather_data, classification)
 
         chat_service.ui_manager.load_ui()

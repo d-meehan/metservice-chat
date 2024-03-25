@@ -86,7 +86,7 @@ class ChatService:
         messages = await self._format_chat_log(system_prompt=system_prompt)
         
         model_response = await client.chat.completions.create(
-            model="gpt-4-turbo-preview",
+            model="gpt-3.5-turbo",
             messages=messages,
         )
         response = model_response.choices[0].message.content
