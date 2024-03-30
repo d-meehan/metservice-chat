@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from typing import TypeVar
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel
 from loguru import logger
@@ -78,7 +79,7 @@ class ChatService:
             location = "unknown location"
         
         system_prompt = QueryResponsePrompt.format(
-            current_datetime=datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            current_datetime=datetime.now(tz=ZoneInfo('Pacific/Auckland')).strftime("%Y-%m-%dT%H:%M:%SZ"),
             user_location=location,
             data_store=formatted_data,
         )
@@ -101,7 +102,7 @@ class ChatService:
 
     async def _model_query_classification(self, response_model: QueryClassification) -> QueryClassification:
         system_prompt = ClassificationPrompt.format(
-            current_datetime=datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            current_datetime=datetime.now(tz=ZoneInfo('Pacific/Auckland')).strftime("%Y-%m-%dT%H:%M:%SZ"),
         )
 
         messages = await self._format_chat_log(system_prompt=system_prompt)

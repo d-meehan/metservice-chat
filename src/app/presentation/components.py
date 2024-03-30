@@ -1,7 +1,8 @@
 
 
 
-chart_options = {
+def chart_options() -> dict:
+    return {
     'time': {'useUTC': False},
     'title': {'text': 'Weather Forecast', 'align': 'left',
             'style': {

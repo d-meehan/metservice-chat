@@ -49,7 +49,9 @@ def load_interface() -> None:
         logger.info(f"loading chat page for user: {app.storage.user}")
         
         async def chat_callback(e: ui.input) -> None:
-            classification: QueryClassification = await chat_service.classify_query(query=e.value)
+            query = e.value
+            e.set_value(None)
+            classification: QueryClassification = await chat_service.classify_query(query=query)
 
             if QueryTypesEnum.NON_WEATHER in classification.query_type:
                 logger.info("Query type is not weather related")
