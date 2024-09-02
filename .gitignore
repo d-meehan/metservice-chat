@@ -161,3 +161,5 @@ cython_debug/
 
 # NiceGUI User Storage
 .nicegui/
+
+.DS_Store
