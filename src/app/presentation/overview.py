@@ -14,52 +14,62 @@ from utils.auth import AuthMiddleware
 
 
 def load_interface() -> None:
+    """
+    Structure for NiceGUI routes - "/" is always shared between clients, "/login" is for authentication, "/chat" is for the chat interface.
+    """
     app.add_middleware(AuthMiddleware)
 
     @ui.page('/')
     def home_page() -> RedirectResponse:
+        # Will attempt to redirect to chat page, triggering the AuthMiddleware
         return RedirectResponse('/chat')
 
     @ui.page('/login')
     def login_page() -> Optional[RedirectResponse]:
-        def try_login() -> None: 
-            logger.info(f"{app.storage.user.get('referrer_path', '/')}")
+        def try_login() -> None:
             if password.value == os.environ.get('PASSWORD'):
                 app.storage.user.update({'authenticated': True})
-                logger.info(f"User authenticated: {app.storage.user.get('authenticated', False)}")
                 ui.navigate.to(app.storage.user.get('referrer_path', '/'))
             else:
                 ui.notify('Wrong password', color='negative')
 
         if app.storage.user.get('authenticated', False):
-            return RedirectResponse('/')
+            return RedirectResponse('/chat')
         with ui.card().classes('absolute-center'):
             password = ui.input('Password', password=True, password_toggle_button=True).on(
                 'keydown.enter', try_login)
             ui.button('Log in', on_click=try_login)
         return None
-    
+
     @ui.page('/chat')
     async def chat_page() -> None:
+        # all services need to be initialised here to ensure they're not shared between clients
         user_service = UserService()
         weather_service = WeatherService()
         ui_manager = UIManager()
-        chat_service = ChatService(weather_service=weather_service, ui_manager=ui_manager, user_service=user_service)
+        chat_service = ChatService(
+            weather_service=weather_service, ui_manager=ui_manager, user_service=user_service)
 
-        logger.info(f"loading chat page for user: {app.storage.user}")
-        
         async def chat_callback(e: ui.input) -> None:
+            """
+            Callback function for receiving chat messages, defined here and pass in to the UI manager so we don't need to pass in all services.
+            """
             query = e.value
+            # clear the input field
             e.set_value(None)
             classification: QueryClassification = await chat_service.classify_query(query=query)
 
+            # if the query is not weather related, model can respond without any weather data for context
             if QueryTypesEnum.NON_WEATHER in classification.query_type:
                 logger.info("Query type is not weather related")
                 await chat_service.process_message()
                 return
-            
+
             logger.info("Query type is weather related")
+            # query type, time and location mapped to API request, retrieving data from Metservice
             metservice_response = await chat_service.weather_service.get_weather_data(classification)
+
+            # chat service accesses chat log through ui manager and weather data through weather service for context
             await chat_service.process_message()
 
             latitude = metservice_response[0].latitude
@@ -71,10 +81,10 @@ def load_interface() -> None:
 
             if QueryTypesEnum.GENERAL_WEATHER in classification.query_type:
                 weather_data = await chat_service.weather_service.fetch_weather_icons(weather_data)
-                
-            chat_service.ui_manager.update_chart(weather_data, classification)
 
+        # loads base UI structure
         chat_service.ui_manager.load_ui()
         with ui.row().classes('h-full w-full no-wrap items-stretch max-h-screen'):
+            # loads chat column and data visualization in separate columns
             chat_service.ui_manager.load_chat_column(callback=chat_callback)
             chat_service.ui_manager.load_data_visualization()

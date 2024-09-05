@@ -1,7 +1,12 @@
 from nicegui import ui
 from loguru import logger
 
+
 class UserService:
+    """
+    Handles all user data stores, currently only location.
+    """
+
     def __init__(self) -> None:
         self._user_longitude = None
         self._user_latitude = None
@@ -10,7 +15,7 @@ class UserService:
         if self._user_longitude is None:
             await self._get_user_location()
         return self._user_longitude
-    
+
     async def user_latitude(self):
         if self._user_latitude is None:
             await self._get_user_location()
@@ -41,7 +46,7 @@ class UserService:
             self._user_latitude = response['latitude']
             self._user_longitude = response['longitude']
             return None
-        #TODO: Add a more specific error message
+        # TODO: Add a more specific error message
         except Exception as e:
             logger.error(f"Error getting user location: {e}")
             return None

@@ -6,7 +6,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 unrestricted_page_routes = {'/login'}
 
+
 class AuthMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware to check if user is authenticated before accessing restricted pages.
+    """
+
     async def dispatch(self, request: Request, call_next):
         if not app.storage.user.get('authenticated', False):
             if request.url.path in Client.page_routes.values() and request.url.path not in unrestricted_page_routes:

@@ -47,6 +47,7 @@ class ChatService:
             content=query,
         )
         classification: QueryClassification = await self._model_query_classification(response_model=QueryClassification)
+        # if location wasn't specified or couldn't be identified and query is related, we assume query is about user's location, check if user has provided location and if not, request it
         if classification.location == None and classification.query_type != "non-weather":
             while 'location' not in app.storage.user or app.storage.user['location'] in [None, "null"]:
                 try:
@@ -56,6 +57,7 @@ class ChatService:
                     app.storage.user['latitude'] = latitude
                     app.storage.user['longitude'] = longitude
 
+                    # convert lat/lon to location for model context
                     location = await self.weather_service._lat_lon_to_location(latitude=latitude, longitude=longitude)
                     app.storage.user['location'] = location
                 except Exception as e:
@@ -97,6 +99,9 @@ class ChatService:
         await self.ui_manager.toggle_visual_processing(show_spinner=False)
 
     async def _model_query_classification(self, response_model: QueryClassification) -> QueryClassification:
+        """
+        This function sends the chat log to the model requesting a classification of the latest message based on the provided pydantic base model.
+        """
         system_prompt = ClassificationPrompt.format(
             current_datetime=datetime.now(tz=ZoneInfo(
                 'Pacific/Auckland')).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -115,8 +120,12 @@ class ChatService:
         return response
 
     async def _format_data_store(self) -> str:
+        """
+        This function formats the weather data from the data store to be included in the system prompt for the model.
+        """
         data_store = self.weather_service.data_store
         formatted_data = [
+            # loops through data instances (combinations of data and query types) and formats them into a string
             f"Date: {data.date}, Query type(s): {data.weather_data_types}, Location: {data.location}, Period(s): {data.period_types}  \n {
                 '\n\n'.join(
                     f'Time: {time.hour} \n {'\n'.join(f'{variable.name}: {variable.value}{variable.units}' for variable in time.variables)}' for time in data.hour_summaries)}"
@@ -126,6 +135,9 @@ class ChatService:
         return formatted_data
 
     async def _format_chat_log(self, system_prompt: str) -> list[dict[str, str]]:
+        """
+        This function formats the chat log to be included in the model prompt.
+        """
         messages = [
             {
                 "role": "system",
@@ -139,7 +151,7 @@ class ChatService:
                 messages.append({"role": "assistant", "content": message.content})
             else:
                 messages.append({"role": message.role, "content": message.content})
+        # ensures final message is from user
         while messages[-1].get("role") == "assistant":
             messages.pop()
-        logger.info(f"Messages: {messages}")
         return messages
